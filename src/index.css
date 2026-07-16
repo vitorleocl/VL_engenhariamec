@@ -1,0 +1,176 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Space Grotesk", sans-serif;
+  }
+}
+
+@media print {
+  /* Set background of the entire window to plain white */
+  html, body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Use the visibility trick to hide system UI and show only the active printable report */
+  body * {
+    visibility: hidden !important;
+  }
+
+  #laudo-crane-printable-area,
+  #laudo-crane-printable-area *,
+  #laudo-nr12-printable-area,
+  #laudo-nr12-printable-area *,
+  #laudo-heavy-printable-area,
+  #laudo-heavy-printable-area *,
+  #pmoc-report-container,
+  #pmoc-report-container * {
+    visibility: visible !important;
+  }
+
+  /* Position and size the active printable report at the top left of the sheet */
+  #laudo-crane-printable-area,
+  #laudo-nr12-printable-area,
+  #laudo-heavy-printable-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 15mm 15mm 15mm 15mm !important; /* Controlled elegant page margin */
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Enforce clean page breaks */
+  .page-break-after-always,
+  .page-break-after {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .page-break-before-always,
+  .page-break-before {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  #pmoc-report-container {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important; /* Managed individually by direct children */
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    display: block !important;
+  }
+
+  #pmoc-report-container > div {
+    box-sizing: border-box !important;
+    padding: 15mm 15mm 15mm 15mm !important; /* Controlled elegant page margins */
+    min-height: 297mm !important; /* Enforces full A4 sheet height */
+    height: auto !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0 !important; /* Completely removes default browser headers and footers (date, title, url) */
+  }
+}
+
+/* Custom styles when generating PDF via html2pdf to guarantee exact A4 layout with wide margins */
+body.generating-pdf {
+  background-color: #ffffff !important;
+}
+
+body.generating-pdf #laudo-crane-printable-area,
+body.generating-pdf #laudo-nr12-printable-area,
+body.generating-pdf #laudo-heavy-printable-area {
+  width: 210mm !important;
+  max-width: 210mm !important;
+  min-width: 210mm !important;
+  padding: 12mm 12mm !important; /* Comfortable professional margin padding */
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-sizing: border-box !important;
+}
+
+body.generating-pdf #pmoc-report-container {
+  width: 210mm !important;
+  max-width: 210mm !important;
+  min-width: 210mm !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-sizing: border-box !important;
+  display: block !important;
+}
+
+body.generating-pdf #pmoc-report-container > div {
+  box-sizing: border-box !important;
+  padding: 12mm 12mm 12mm 12mm !important; /* Comfortable PDF page margins */
+  min-height: 297mm !important;
+  height: auto !important;
+  page-break-after: always !important;
+  break-after: page !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+}
+
+body.generating-pdf .page-break-after-always,
+body.generating-pdf .page-break-after {
+  page-break-after: always !important;
+  break-after: page !important;
+}
+
+body.generating-pdf .page-break-before-always,
+body.generating-pdf .page-break-before {
+  page-break-before: always !important;
+  break-before: page !important;
+}
+
+body.generating-pdf .print-avoid-break {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+

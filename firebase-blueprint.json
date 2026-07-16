@@ -1,0 +1,152 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with role details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique user ID" },
+        "name": { "type": "string", "description": "Display name of the user" },
+        "email": { "type": "string", "description": "Email address" },
+        "role": { "type": "string", "enum": ["admin", "client"], "description": "User hierarchy role" },
+        "company": { "type": "string", "description": "Associated company name" },
+        "phone": { "type": "string", "description": "Contact number" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["uid", "name", "email", "role", "createdAt"]
+    },
+    "Admin": {
+      "title": "Admin Mapping",
+      "description": "Trusted mapping of admin user IDs",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Client business details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "company": { "type": "string" },
+        "cnpj_cpf": { "type": "string" },
+        "address": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "cnpj_cpf"]
+    },
+    "Equipment": {
+      "title": "Equipment",
+      "description": "Equipment inspected or managed",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "type": { "type": "string" },
+        "brand": { "type": "string" },
+        "model": { "type": "string" },
+        "serialNumber": { "type": "string" },
+        "year": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "type", "brand", "model"]
+    },
+    "Laudo": {
+      "title": "Laudo Técnico",
+      "description": "Laudo or tech report metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "numero": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "equipmentId": { "type": "string" },
+        "equipmentModel": { "type": "string" },
+        "dateInspection": { "type": "string" },
+        "rt": { "type": "string" },
+        "art": { "type": "string" },
+        "status": { "type": "string", "enum": ["em_elaboracao", "emitido", "vencido"] },
+        "pdfUrl": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "numero", "clientId", "equipmentId", "status", "createdAt"]
+    },
+    "Checklist": {
+      "title": "Checklist Inspeção",
+      "description": "Inspections forms and checklists",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "equipmentId": { "type": "string" },
+        "equipmentModel": { "type": "string" },
+        "questions": { "type": "object" },
+        "signatureUrl": { "type": "string" },
+        "digitalSignature": { "type": "string" },
+        "inspectorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "clientId", "equipmentId", "createdAt"]
+    },
+    "ChecklistQuestion": {
+      "title": "Checklist Question",
+      "description": "Inspections template checklist item question",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["nr12", "pmoc", "munck", "guindaste", "maquinas_pesadas", "playground", "reclassificacao_monta", "integridade_fisica"] },
+        "category": { "type": "string" },
+        "text": { "type": "string" },
+        "responseType": { "type": "string", "enum": ["default", "text", "rating"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "category", "text"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Direct profiles by user ID"
+    },
+    "admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Whitelist of verified admin IDs"
+    },
+    "clients/{clientId}": {
+      "schema": "Client",
+      "description": "Client records logged by admin"
+    },
+    "equipments/{equipmentId}": {
+      "schema": "Equipment",
+      "description": "Registered devices and machines"
+    },
+    "laudos/{laudoId}": {
+      "schema": "Laudo",
+      "description": "Technical certificates and laudos"
+    },
+    "checklists/{checklistId}": {
+      "schema": "Checklist",
+      "description": "Completed checklists and inspection reports"
+    },
+    "checklist_questions/{questionId}": {
+      "schema": "ChecklistQuestion",
+      "description": "Dynamic templates for editable checklist items"
+    }
+  }
+}

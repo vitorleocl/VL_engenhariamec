@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Global Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'vitorleonardocl@gmail.com'
+      );
+    }
+    
+    function isOwnerOfUserDoc(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isClientOwner(clientId) {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId;
+    }
+    
+    // Entity Schema Validation functions (Anti-Update-Gap)
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.email is string && data.email.size() <= 200 &&
+             data.role is string && (data.role == 'admin' || data.role == 'client');
+    }
+    
+    function isValidClient(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.email is string && data.email.size() <= 200 &&
+             data.cnpj_cpf is string && data.cnpj_cpf.size() <= 30;
+    }
+    
+    function isValidEquipment(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.clientId is string && data.clientId.size() <= 128 &&
+             data.type is string && data.type.size() <= 100 &&
+             data.brand is string && data.brand.size() <= 100 &&
+             data.model is string && data.model.size() <= 100;
+    }
+    
+    function isValidLaudo(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.numero is string && data.numero.size() <= 50 &&
+             data.clientId is string && data.clientId.size() <= 128 &&
+             data.equipmentId is string && data.equipmentId.size() <= 128 &&
+             data.status is string && (data.status == 'em_elaboracao' || data.status == 'emitido' || data.status == 'vencido');
+    }
+    
+    function isValidChecklist(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.type is string && data.type.size() <= 100 &&
+             data.clientId is string && data.clientId.size() <= 128 &&
+             data.equipmentId is string && data.equipmentId.size() <= 128;
+    }
+    
+    function isValidChecklistQuestion(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.type is string && data.type.size() <= 100 &&
+             data.category is string && data.category.size() <= 200 &&
+             data.text is string && data.text.size() <= 1000 &&
+             (!('responseType' in data) || (data.responseType is string && data.responseType.size() <= 50));
+    }
+
+    // MATCH BLOCKS FOR SYSTEM COLLECTIONS
+    
+    match /users/{userId} {
+      allow get: if isOwnerOfUserDoc(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidUser(incoming()) && isOwnerOfUserDoc(userId);
+      allow update: if isSignedIn() && isValidUser(incoming()) && (isAdmin() || (isOwnerOfUserDoc(userId) && !incoming().keys().hasAny(['role'])));
+      allow delete: if isAdmin();
+    }
+    
+    match /admins/{adminId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    
+    match /clients/{clientId} {
+      allow get: if isAdmin() || isClientOwner(clientId);
+      allow list: if isAdmin() || (isSignedIn() && isClientOwner(clientId));
+      allow create, update, delete: if isAdmin() && isValidClient(incoming());
+    }
+    
+    match /equipments/{equipmentId} {
+      allow get: if isAdmin() || isClientOwner(resource.data.clientId);
+      allow list: if isAdmin() || (isSignedIn() && isClientOwner(resource.data.clientId));
+      allow create, update, delete: if isAdmin() && isValidEquipment(incoming());
+    }
+    
+    match /laudos/{laudoId} {
+      allow get: if isAdmin() || isClientOwner(resource.data.clientId);
+      allow list: if isAdmin() || (isSignedIn() && isClientOwner(resource.data.clientId));
+      allow create, update, delete: if isAdmin() && isValidLaudo(incoming());
+    }
+    
+    match /checklists/{checklistId} {
+      allow get: if isAdmin() || isClientOwner(resource.data.clientId);
+      allow list: if isAdmin() || (isSignedIn() && isClientOwner(resource.data.clientId));
+      allow create, update, delete: if isAdmin() && isValidChecklist(incoming());
+    }
+    
+    match /checklist_questions/{questionId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin() && isValidChecklistQuestion(incoming());
+    }
+  }
+}
