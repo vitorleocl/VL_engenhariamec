@@ -33,7 +33,14 @@ import {
   Shield,
   Phone,
   Edit,
-  Wrench
+  Wrench,
+  TrendingUp,
+  BarChart3,
+  PieChart,
+  Target,
+  Layers,
+  Users,
+  CheckSquare
 } from "lucide-react";
 // @ts-ignore
 import html2pdf from "html2pdf.js";
@@ -53,6 +60,51 @@ import assinaturaVitor from "../../assets/images/assinatura_vitor_1784295142175.
 import firebaseConfig from "../../../firebase-applet-config.json";
 
 const hasRealConfig = firebaseConfig && firebaseConfig.apiKey && firebaseConfig.apiKey !== 'MOCK_API_KEY' && !firebaseConfig.apiKey.includes('YOUR_');
+
+export const PORTE_MARGINS: Record<string, number> = {
+  "Pessoa Física": 10,
+  "MEI": 12,
+  "Microempresa": 15,
+  "Pequena Empresa": 18,
+  "Média Empresa": 22,
+  "Grande Empresa": 28,
+  "Indústria": 32,
+};
+
+export const COMPLEXITY_MARGINS: Record<string, { margin: number; hhMult: number; label: string }> = {
+  "Baixa": { margin: 10, hhMult: 0.8, label: "Baixa" },
+  "Normal": { margin: 15, hhMult: 1.0, label: "Normal" },
+  "Alta": { margin: 25, hhMult: 1.3, label: "Alta" },
+  "Muito Alta": { margin: 35, hhMult: 1.6, label: "Muito Alta" },
+};
+
+export interface TeamMember {
+  id: string;
+  role: string;
+  hourlyRate: number;
+  hours: number;
+}
+
+export interface ActivityHour {
+  id: string;
+  name: string;
+  category: "campo" | "escritorio" | "administrativo";
+  hours: number;
+  hourlyRate: number;
+}
+
+export interface OperationalExpense {
+  id: string;
+  name: string;
+  qty: number;
+  unitValue: number;
+}
+
+export interface AdminExpense {
+  id: string;
+  name: string;
+  value: number;
+}
 
 const HOURLY_ROLES = [
   { label: "Técnico (R$ 19,22)", value: 19.22 },
@@ -364,15 +416,95 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
   const [clientContact, setClientContact] = useState("");
   const [clientEmail, setClientEmail] = useState("");
 
-  // ETAPA 2 - Dados do Serviço State
+  // ETAPA 2 - Dados do Serviço e Escopo
   const [selectedServices, setSelectedServices] = useState<ServiceTemplate[]>([]);
 
-  // ETAPA 3 - Precificação State
+  // 2.1 Informações Gerais
+  const [appliedNorm, setAppliedNorm] = useState("NR-12 / ABNT NBR ISO 12100");
+  const [distanceKm, setDistanceKm] = useState<number>(50);
+  const [technicalVisits, setTechnicalVisits] = useState<number>(1);
+  const [daysInField, setDaysInField] = useState<number>(2);
+
+  // 2.2 Características do Serviço
+  const [qtyEquipments, setQtyEquipments] = useState<number>(1);
+  const [qtyMachines, setQtyMachines] = useState<number>(0);
+  const [qtyRooms, setQtyRooms] = useState<number>(0);
+  const [qtySystems, setQtySystems] = useState<number>(0);
+  const [builtAreaM2, setBuiltAreaM2] = useState<number>(0);
+  const [climatizedAreaM2, setClimatizedAreaM2] = useState<number>(0);
+  const [qtyFloors, setQtyFloors] = useState<number>(1);
+  const [installedPower, setInstalledPower] = useState<number>(0);
+  const [totalBtu, setTotalBtu] = useState<number>(0);
+  const [qtyReports, setQtyReports] = useState<number>(1);
+  const [qtyArts, setQtyArts] = useState<number>(1);
+  const [specificParamsText, setSpecificParamsText] = useState<string>("");
+
+  // 2.3 Complexidade
+  const [complexity, setComplexity] = useState<"Baixa" | "Normal" | "Alta" | "Muito Alta">("Normal");
+
+  // 2.4 Porte do Cliente
+  const [clientSize, setClientSize] = useState<"Pessoa Física" | "MEI" | "Microempresa" | "Pequena Empresa" | "Média Empresa" | "Grande Empresa" | "Indústria">("Pequena Empresa");
+
+  // 2.5 Equipe Técnica
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
+    { id: "tm-1", role: "Engenheiro Responsável", hourlyRate: 95.00, hours: 16 },
+    { id: "tm-2", role: "Técnico", hourlyRate: 35.00, hours: 12 },
+    { id: "tm-3", role: "Auxiliar", hourlyRate: 22.00, hours: 8 },
+    { id: "tm-4", role: "Estagiário", hourlyRate: 15.00, hours: 0 },
+  ]);
+
+  // 2.6 Distribuição das Horas (Atividades)
+  const [activities, setActivities] = useState<ActivityHour[]>([
+    { id: "act-1", name: "Planejamento", category: "escritorio", hours: 2, hourlyRate: 95 },
+    { id: "act-2", name: "Deslocamento", category: "campo", hours: 3, hourlyRate: 35 },
+    { id: "act-3", name: "Inspeção Técnica", category: "campo", hours: 8, hourlyRate: 95 },
+    { id: "act-4", name: "Levantamentos", category: "campo", hours: 4, hourlyRate: 35 },
+    { id: "act-5", name: "Coleta de Dados", category: "campo", hours: 2, hourlyRate: 35 },
+    { id: "act-6", name: "Registro Fotográfico", category: "campo", hours: 2, hourlyRate: 35 },
+    { id: "act-7", name: "Análises Técnicas", category: "escritorio", hours: 6, hourlyRate: 95 },
+    { id: "act-8", name: "Elaboração do Laudo", category: "escritorio", hours: 8, hourlyRate: 95 },
+    { id: "act-9", name: "Revisão", category: "escritorio", hours: 2, hourlyRate: 95 },
+    { id: "act-10", name: "Emissão de ART", category: "escritorio", hours: 1, hourlyRate: 95 },
+    { id: "act-11", name: "Atendimento ao Cliente", category: "administrativo", hours: 2, hourlyRate: 50 },
+    { id: "act-12", name: "Administrativo", category: "administrativo", hours: 2, hourlyRate: 35 },
+  ]);
+
+  // 2.7 Despesas Operacionais
+  const [operationalExpenses, setOperationalExpenses] = useState<OperationalExpense[]>([
+    { id: "op-1", name: "Combustível", qty: 50, unitValue: 1.50 },
+    { id: "op-2", name: "Pedágio", qty: 2, unitValue: 15.00 },
+    { id: "op-3", name: "Hospedagem", qty: 0, unitValue: 250.00 },
+    { id: "op-4", name: "Alimentação", qty: 2, unitValue: 60.00 },
+    { id: "op-5", name: "Passagens", qty: 0, unitValue: 0.00 },
+    { id: "op-6", name: "Estacionamento", qty: 1, unitValue: 25.00 },
+    { id: "op-7", name: "Frete", qty: 0, unitValue: 0.00 },
+    { id: "op-8", name: "Locação de Equipamentos", qty: 0, unitValue: 0.00 },
+    { id: "op-9", name: "Equipamentos de Medição", qty: 1, unitValue: 100.00 },
+    { id: "op-10", name: "Diárias", qty: 2, unitValue: 150.00 },
+    { id: "op-11", name: "Outros", qty: 0, unitValue: 0.00 },
+  ]);
+
+  // 2.8 Despesas Administrativas
+  const [adminExpenses, setAdminExpenses] = useState<AdminExpense[]>([
+    { id: "adm-1", name: "ART CREA-PE", value: 108.39 },
+    { id: "adm-2", name: "Seguro", value: 50.00 },
+    { id: "adm-3", name: "Impressões / Plotagens", value: 30.00 },
+    { id: "adm-4", name: "Correios / Envio", value: 0.00 },
+    { id: "adm-5", name: "Taxas e Licenças", value: 0.00 },
+    { id: "adm-6", name: "Software / Certificado", value: 45.00 },
+    { id: "adm-7", name: "Despesas Bancárias", value: 15.00 },
+    { id: "adm-8", name: "Outros", value: 0.00 },
+  ]);
+
+  // ETAPA 3 - Controles e Margem
+  const [autoMargin, setAutoMargin] = useState<boolean>(true);
+  const [customMarginPercent, setCustomMarginPercent] = useState<number>(30);
+
   const [multiplierQty, setMultiplierQty] = useState<number>(1);
   const [technicalHours, setTechnicalHours] = useState<number>(16);
   const [docHours, setDocHours] = useState<number>(8);
   const [hourlyRate, setHourlyRate] = useState<number>(220);
-  const [travelKm, setTravelKm] = useState<number>(0);
+  const [travelKm, setTravelKm] = useState<number>(50);
   const [lodgingDays, setLodgingDays] = useState<number>(0);
   const [artCost, setArtCost] = useState<number>(108.39);
   const [extraExpenses, setExtraExpenses] = useState<number>(0);
@@ -560,54 +692,112 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
     }
   };
 
-  // Calculation Engine (Math helper based on Etapa 3 prompt)
+  // Calculation Engine (Reproduz exatamente a lógica financeira da planilha mestre - Etapa 3)
   const calculateFinancials = () => {
-    // Stage 1: Base de Horas (H/H)
-    const laborCost = technicalHours * hourlyRate;
-    const docLaborCost = docHours * hourlyRate;
+    // 3.1 Custo de Mão de Obra = Σ (Horas × Valor HH)
+    const activityLaborCost = activities.reduce((sum, act) => sum + (act.hours * act.hourlyRate), 0);
+    const teamLaborCost = teamMembers.reduce((sum, tm) => sum + (tm.hours * tm.hourlyRate), 0);
+    const totalLaborCost = activityLaborCost > 0 ? activityLaborCost : teamLaborCost;
 
-    // Stage 2: Custo Operacional e Logístico
-    const travelCost = travelKm * 1.5; // R$ 1.50 per Km
-    const lodgingCost = lodgingDays * 250; // R$ 250 per day
-    const directCostsSum = laborCost + docLaborCost + travelCost + lodgingCost + artCost + extraExpenses;
+    const totalHH = activities.reduce((sum, act) => sum + act.hours, 0);
+    const fieldHours = activities.filter(a => a.category === "campo").reduce((s, a) => s + a.hours, 0);
+    const officeHours = activities.filter(a => a.category === "escritorio").reduce((s, a) => s + a.hours, 0);
+    const adminHours = activities.filter(a => a.category === "administrativo").reduce((s, a) => s + a.hours, 0);
 
-    // Stage 3: Formação de Valor (Margem & Gross-up de Impostos)
-    // Formula: Subtotal = Cost / (1 - Margin/100)
-    const marginPct = profitMargin / 100;
-    const preTaxValue = marginPct < 1 ? directCostsSum / (1 - marginPct) : directCostsSum * 1.5;
-    const profitValue = preTaxValue - directCostsSum;
+    // 3.2 Custos Operacionais
+    const operationalCostTotal = operationalExpenses.reduce((sum, exp) => sum + (exp.qty * exp.unitValue), 0);
 
-    // Gross-up de Impostos
-    // Formula: Total = PreTaxValue / (1 - Tax/100)
-    const taxesFactor = taxPercent / 100;
-    const totalGeralCalculated = taxesFactor < 1 ? preTaxValue / (1 - taxesFactor) : preTaxValue * 1.2;
-    const impostos = totalGeralCalculated - preTaxValue;
+    // 3.3 Custos Administrativos
+    const adminCostTotal = adminExpenses.reduce((sum, exp) => sum + exp.value, 0);
 
-    // Apply Minimum Price constraint
-    const finalCalculated = Math.max(totalGeralCalculated, minPrice);
+    // 3.4 Custo Total do Serviço = Mão de Obra + Custos Operacionais + Custos Administrativos
+    const totalCost = totalLaborCost + operationalCostTotal + adminCostTotal;
 
-    // Apply Discount on the final price
+    // 3.5 Margem Comercial
+    const porteMargin = PORTE_MARGINS[clientSize] || 18;
+    const complexityMargin = COMPLEXITY_MARGINS[complexity]?.margin || 15;
+    const recommendedMargin = porteMargin + complexityMargin;
+
+    // 3.6 Aplicação da Margem (Sim = Automática / Não = Manual)
+    const appliedMarginPct = autoMargin ? recommendedMargin : customMarginPercent;
+
+    // 3.7 Preço Final
+    const marginValue = totalCost * (appliedMarginPct / 100);
+    const preTaxPrice = totalCost + marginValue;
+
+    // Impostos (NFS-e)
+    const taxFactor = hasNf && taxPercent > 0 ? taxPercent / 100 : 0;
+    const totalWithTaxCalculated = taxFactor > 0 && taxFactor < 1 ? preTaxPrice / (1 - taxFactor) : preTaxPrice;
+    const impostos = totalWithTaxCalculated - preTaxPrice;
+
+    // Preço Final após Desconto e Mínimo
+    const finalCalculated = Math.max(totalWithTaxCalculated, minPrice);
     const discountVal = (finalCalculated * discountPercent) / 100;
-    const totalGeral = finalCalculated - discountVal;
+    const totalGeral = Math.max(0, finalCalculated - discountVal);
 
-    // Unit Pricing
-    const totalQty = selectedServices.length * multiplierQty || 1;
-    const valuePerEquipment = totalGeral / totalQty;
+    // 3.8 Comparação com Mercado
+    const totalServicesCount = selectedServices.length || 1;
+    const basePriceSum = selectedServices.reduce((sum, s) => sum + (s.basePrice || 2500), 0) * (multiplierQty || 1);
+    const marketAverageValue = basePriceSum > 0 ? basePriceSum : 3500;
+
+    const marketDiffVal = totalGeral - marketAverageValue;
+    const marketDiffPct = marketAverageValue > 0 ? ((totalGeral - marketAverageValue) / marketAverageValue) * 100 : 0;
+
+    let marketClassification = "Dentro do Mercado";
+    let marketBadge = "🟡 Dentro do Mercado";
+    if (totalGeral < marketAverageValue * 0.92) {
+      marketClassification = "Abaixo do Mercado";
+      marketBadge = "🟢 Abaixo do Mercado";
+    } else if (totalGeral > marketAverageValue * 1.08) {
+      marketClassification = "Acima do Mercado";
+      marketBadge = "🔴 Acima do Mercado";
+    }
+
+    // 3.9 Indicadores Financeiros
+    const profitBruto = totalGeral - impostos - totalCost;
+    const profitMarginPct = totalGeral > 0 ? (profitBruto / totalGeral) * 100 : 0;
+    const costPerHH = totalHH > 0 ? totalCost / totalHH : 0;
+    const revenuePerHH = totalHH > 0 ? totalGeral / totalHH : 0;
+
+    const totalQty = totalServicesCount * (multiplierQty || 1);
 
     return {
-      laborCost,
-      docLaborCost,
-      travelCost,
-      lodgingCost,
-      directCostsSum,
-      preTaxValue,
-      profitValue,
-      subtotal: finalCalculated,
-      descontos: discountVal,
+      totalHH,
+      fieldHours,
+      officeHours,
+      adminHours,
+      totalLaborCost,
+      operationalCostTotal,
+      adminCostTotal,
+      totalCost,
+      porteMargin,
+      complexityMargin,
+      recommendedMargin,
+      appliedMarginPct,
+      marginValue,
+      preTaxPrice,
       impostos,
+      discountVal,
       totalGeral,
-      valuePerEquipment,
-      margemEfetiva: profitMargin
+      marketAverageValue,
+      marketDiffVal,
+      marketDiffPct,
+      marketClassification,
+      marketBadge,
+      profitBruto,
+      profitMarginPct,
+      costPerHH,
+      revenuePerHH,
+      // Legacy backwards-compatibility properties
+      laborCost: totalLaborCost,
+      docLaborCost: officeHours * (hourlyRate || 95),
+      travelCost: distanceKm * 1.5,
+      lodgingCost: lodgingDays * 250,
+      directCostsSum: totalCost,
+      profitValue: marginValue,
+      subtotal: totalGeral,
+      descontos: discountVal,
+      valuePerEquipment: totalQty > 0 ? totalGeral / totalQty : totalGeral
     };
   };
 
@@ -1403,135 +1593,622 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
             </div>
           )}
 
-          {/* STEP 2: SERVICES & PARAMETERS */}
+          {/* STEP 2: PARAMETROS DETALHADOS DO ESCOPO */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
-                <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+              
+              {/* HEADER ETAPA 2 */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
                     <Shield className="h-5 w-5 text-emerald-400" />
-                    <h3 className="text-white text-sm font-bold uppercase tracking-wider font-mono">Etapa 2 – Selecionar Serviços Cadastrados</h3>
+                    <h3 className="text-white text-sm font-bold uppercase tracking-wider font-mono">
+                      Etapa 2 – Parâmetros Detalhados do Escopo
+                    </h3>
                   </div>
-                  <span className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-mono">
-                    {selectedServices.length} Serviços Selecionados
+                  <span className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-mono font-bold">
+                    {selectedServices.length} Serviço(s) Selecionado(s)
                   </span>
                 </div>
+                <p className="text-slate-400 text-xs">
+                  Levante todas as informações técnicas necessárias para dimensionar a mão de obra, logística e despesas antes do cálculo do orçamento.
+                </p>
+              </div>
 
-                <p className="text-slate-400 text-xs">Múltipla escolha técnica. Selecione quais laudos ou pacotes de vistorias serão combinados neste orçamento.</p>
+              {/* 2.1 INFORMAÇÕES GERAIS DO ESCOPO */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                  <FileText className="h-4 w-4 text-[#4895EF]" />
+                  <span>2.1 Informações Gerais</span>
+                </h4>
 
-                {/* SERVICES GRID */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {PRE_REGISTERED_SERVICES.map((serv) => {
-                    const isSelected = selectedServices.some(s => s.id === serv.id);
-                    return (
-                      <div
-                        key={serv.id}
-                        onClick={() => toggleService(serv)}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer text-left flex flex-col justify-between h-44 ${
-                          isSelected
-                            ? "bg-[#0B2545]/40 border-emerald-500/80 shadow-lg shadow-emerald-500/5"
-                            : "bg-slate-950 border-slate-850 hover:border-slate-750"
-                        }`}
-                      >
-                        <div>
-                          <div className="flex justify-between items-start gap-2">
-                            <span className="bg-slate-900 border border-slate-850 text-slate-400 px-2 py-0.5 rounded-md text-[9px] font-mono uppercase">
-                              {serv.category}
-                            </span>
-                            <div className={`h-4 w-4 rounded-full border flex items-center justify-center transition-all ${
-                              isSelected ? "bg-emerald-500 border-emerald-500" : "border-slate-800"
-                            }`}>
-                              {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs font-mono">
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Norma Técnica Aplicável</label>
+                    <input 
+                      type="text"
+                      value={appliedNorm}
+                      onChange={(e) => setAppliedNorm(e.target.value)}
+                      placeholder="Ex: NR-12 / ABNT NBR ISO 12100"
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#4895EF]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Cliente (Razão Social)</label>
+                    <input 
+                      type="text"
+                      value={clientCompany}
+                      disabled
+                      className="w-full bg-slate-950/60 border border-slate-850/60 rounded-xl px-3 py-2 text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Cidade / Estado</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        value={clientCity}
+                        onChange={(e) => setClientCity(e.target.value)}
+                        className="w-2/3 bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                      />
+                      <input 
+                        type="text"
+                        value={clientState}
+                        onChange={(e) => setClientState(e.target.value)}
+                        className="w-1/3 bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none text-center"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Distância da Sede (Km)</label>
+                    <input 
+                      type="number"
+                      value={distanceKm}
+                      onChange={(e) => {
+                        const km = Math.max(0, parseInt(e.target.value) || 0);
+                        setDistanceKm(km);
+                        setTravelKm(km);
+                      }}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Quantidade de Visitas Técnicas</label>
+                    <input 
+                      type="number"
+                      value={technicalVisits}
+                      onChange={(e) => setTechnicalVisits(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Quantidade de Dias em Campo</label>
+                    <input 
+                      type="number"
+                      value={daysInField}
+                      onChange={(e) => setDaysInField(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* SERVIÇOS SELECIONADOS CARDS */}
+                <div className="pt-3 border-t border-slate-850">
+                  <span className="text-slate-400 text-[10px] font-mono uppercase block mb-2">Serviços Base de Referência (Múltipla Seleção)</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {PRE_REGISTERED_SERVICES.map((serv) => {
+                      const isSelected = selectedServices.some(s => s.id === serv.id);
+                      return (
+                        <div
+                          key={serv.id}
+                          onClick={() => toggleService(serv)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? "bg-[#0B2545]/50 border-emerald-500 text-white"
+                              : "bg-slate-950 border-slate-850 text-slate-400 hover:border-slate-750"
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 uppercase">
+                                {serv.category}
+                              </span>
+                              <h5 className="font-bold text-xs text-white">{serv.name}</h5>
                             </div>
+                            <span className="text-[10px] text-slate-500 font-mono">Preço Base: R$ {serv.basePrice.toLocaleString("pt-BR")} • {serv.hours}h</span>
                           </div>
-                          
-                          <h4 className="text-white font-bold text-xs mt-2.5">{serv.name}</h4>
-                          <p className="text-slate-500 text-[10px] leading-normal mt-1 line-clamp-2">{serv.description}</p>
+                          <div className={`h-5 w-5 rounded-full border flex items-center justify-center shrink-0 ${
+                            isSelected ? "bg-emerald-500 border-emerald-500" : "border-slate-800"
+                          }`}>
+                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                          </div>
                         </div>
-
-                        <div className="border-t border-slate-900/80 pt-2.5 flex justify-between items-center text-[10px] font-mono">
-                          <span className="text-slate-400">Base: <strong className="text-white">R$ {serv.basePrice}</strong></span>
-                          <span className="text-slate-500">{serv.hours}h • {serv.professionals} Eng.</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              {selectedServices.length > 0 && (
-                <div className="bg-slate-900/30 border border-slate-800 p-6 rounded-2xl space-y-4">
-                  <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">Parâmetros Detalhados do Escopo</h4>
-                  <p className="text-slate-400 text-[10px]">Ajuste fino preliminar de prazos e dimensionamento para as soluções escolhidas:</p>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 font-mono text-xs">
-                    <div className="space-y-1">
-                      <span className="text-slate-400 text-[10px] uppercase">Multiplicador Geral (Qtd de Unidades/Máquinas)</span>
-                      <input 
-                        type="number" 
-                        value={multiplierQty} 
-                        onChange={(e) => setMultiplierQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-slate-400 text-[10px] uppercase">Horas de Engenharia Estimadas</span>
-                      <input 
-                        type="number" 
-                        value={technicalHours} 
-                        onChange={(e) => setTechnicalHours(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-slate-400 text-[10px] uppercase">H/TRAB. DOCUMENTAÇÃO</span>
-                      <input 
-                        type="number" 
-                        value={docHours} 
-                        onChange={(e) => setDocHours(Math.max(0, parseInt(e.target.value) || 0))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1 col-span-1 sm:col-span-2 lg:col-span-1">
-                      <span className="text-slate-400 text-[10px] uppercase">Valor da Hora Técnica (R$/h)</span>
-                      <div className="flex gap-1.5">
-                        <select
-                          value={HOURLY_ROLES.find(r => Math.abs(r.value - hourlyRate) < 0.01)?.value || "custom"}
-                          onChange={(e) => {
-                            if (e.target.value !== "custom") {
-                              setHourlyRate(parseFloat(e.target.value));
-                            }
-                          }}
-                          className="flex-1 bg-slate-950 border border-slate-850 rounded-xl px-2 py-2 text-white focus:outline-none text-[10px] font-mono"
-                        >
-                          {HOURLY_ROLES.map((role) => (
-                            <option key={role.label} value={role.value} className="bg-slate-950 text-white">
-                              {role.label}
-                            </option>
-                          ))}
-                          <option value="custom" className="bg-slate-950 text-white">Outro (Manual)</option>
-                        </select>
-                        <input 
-                          type="number" 
-                          step="0.01"
-                          value={hourlyRate} 
-                          onChange={(e) => setHourlyRate(Math.max(1, parseFloat(e.target.value) || 1))}
-                          className="w-16 bg-slate-950 border border-slate-850 rounded-xl px-2 py-2 text-white focus:outline-none text-center font-mono text-[10px]"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-slate-400 text-[10px] uppercase">Custo Fixo de ART (CREA) (R$)</span>
-                      <input 
-                        type="number" 
-                        value={artCost} 
-                        onChange={(e) => setArtCost(Math.max(0, parseFloat(e.target.value) || 0))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none"
-                      />
-                    </div>
+              {/* 2.2 CARACTERÍSTICAS DO SERVIÇO */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                  <Sliders className="h-4 w-4 text-emerald-400" />
+                  <span>2.2 Características do Serviço (Dimensionamento Físico)</span>
+                </h4>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs font-mono">
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Equipamentos</span>
+                    <input 
+                      type="number"
+                      value={qtyEquipments}
+                      onChange={(e) => setQtyEquipments(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Máquinas</span>
+                    <input 
+                      type="number"
+                      value={qtyMachines}
+                      onChange={(e) => setQtyMachines(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Ambientes</span>
+                    <input 
+                      type="number"
+                      value={qtyRooms}
+                      onChange={(e) => setQtyRooms(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Sistemas</span>
+                    <input 
+                      type="number"
+                      value={qtySystems}
+                      onChange={(e) => setQtySystems(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Área Construída m²</span>
+                    <input 
+                      type="number"
+                      value={builtAreaM2}
+                      onChange={(e) => setBuiltAreaM2(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Área Climatizada m²</span>
+                    <input 
+                      type="number"
+                      value={climatizedAreaM2}
+                      onChange={(e) => setClimatizedAreaM2(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Pavimentos</span>
+                    <input 
+                      type="number"
+                      value={qtyFloors}
+                      onChange={(e) => setQtyFloors(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Potência Inst. (kW)</span>
+                    <input 
+                      type="number"
+                      value={installedPower}
+                      onChange={(e) => setInstalledPower(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">BTU Total (Clima)</span>
+                    <input 
+                      type="number"
+                      value={totalBtu}
+                      onChange={(e) => setTotalBtu(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Laudos Emitidos</span>
+                    <input 
+                      type="number"
+                      value={qtyReports}
+                      onChange={(e) => setQtyReports(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd ARTs CREA</span>
+                    <input 
+                      type="number"
+                      value={qtyArts}
+                      onChange={(e) => setQtyArts(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
                   </div>
                 </div>
-              )}
+
+                <div className="space-y-1 pt-2">
+                  <label className="text-slate-400 text-[10px] uppercase font-mono block">Especificações Técnicas Adicionais do Escopo</label>
+                  <input 
+                    type="text"
+                    value={specificParamsText}
+                    onChange={(e) => setSpecificParamsText(e.target.value)}
+                    placeholder="Ex: Posição de acesso por trava-quedas, restrições operacionais noturnas..."
+                    className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* 2.3 COMPLEXIDADE E 2.4 PORTE DO CLIENTE */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* 2.3 COMPLEXIDADE */}
+                <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <div className="border-b border-slate-800 pb-2 flex items-center justify-between">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-purple-400" />
+                      <span>2.3 Complexidade do Serviço</span>
+                    </h4>
+                    <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full font-bold">
+                      +{COMPLEXITY_MARGINS[complexity].margin}% Margem
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-[10px] leading-normal">
+                    Selecione o nível de risco e rigor normativo para ajuste automático do tempo de campo e margem recomendada.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 font-mono">
+                    {(["Baixa", "Normal", "Alta", "Muito Alta"] as const).map((lvl) => {
+                      const isSel = complexity === lvl;
+                      const info = COMPLEXITY_MARGINS[lvl];
+                      return (
+                        <button
+                          key={lvl}
+                          type="button"
+                          onClick={() => {
+                            setComplexity(lvl);
+                            setActivities(prev => prev.map(a => ({
+                              ...a,
+                              hours: Math.max(1, Math.round(a.hours * info.hhMult))
+                            })));
+                          }}
+                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                            isSel
+                              ? "bg-purple-500/10 border-purple-500 text-white shadow-lg shadow-purple-500/5"
+                              : "bg-slate-950 border-slate-850 text-slate-400 hover:border-slate-750"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-xs text-white">{lvl}</span>
+                            <span className="text-[9px] font-bold text-purple-400">+{info.margin}%</span>
+                          </div>
+                          <span className="text-[9px] text-slate-500 block">Mult. HH: {info.hhMult}x</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2.4 PORTE DO CLIENTE */}
+                <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <div className="border-b border-slate-800 pb-2 flex items-center justify-between">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-sky-400" />
+                      <span>2.4 Porte do Cliente</span>
+                    </h4>
+                    <span className="text-[10px] font-mono text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full font-bold">
+                      +{PORTE_MARGINS[clientSize]}% Margem
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-[10px] leading-normal">
+                    A categoria jurídica/faturamento do cliente define o fator de responsabilidade e compliance do laudo.
+                  </p>
+
+                  <select
+                    value={clientSize}
+                    onChange={(e) => setClientSize(e.target.value as any)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+                  >
+                    {Object.entries(PORTE_MARGINS).map(([porte, marg]) => (
+                      <option key={porte} value={porte} className="bg-slate-950 text-white">
+                        {porte} (+{marg}% Margem Comercial)
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-850 text-[10px] font-mono text-slate-400 flex justify-between items-center">
+                    <span>Soma de Margens Base Sugerida:</span>
+                    <strong className="text-emerald-400 text-xs">
+                      {PORTE_MARGINS[clientSize] + COMPLEXITY_MARGINS[complexity].margin}%
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2.5 EQUIPE TÉCNICA */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-amber-400" />
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                      2.5 Equipe Técnica Envolvida
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTeamMembers(prev => [
+                        ...prev,
+                        { id: `tm-${Date.now()}`, role: "Especialista Consultor", hourlyRate: 120.00, hours: 8 }
+                      ]);
+                    }}
+                    className="bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 px-3 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all cursor-pointer"
+                  >
+                    + Adicionar Profissional
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {teamMembers.map((tm, index) => (
+                    <div key={tm.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-850 items-center font-mono text-xs">
+                      <div className="md:col-span-5">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-0.5">Função / Cargo Técnico</span>
+                        <input 
+                          type="text"
+                          value={tm.role}
+                          onChange={(e) => {
+                            const newTM = [...teamMembers];
+                            newTM[index].role = e.target.value;
+                            setTeamMembers(newTM);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-bold focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-0.5">Valor HH (R$/h)</span>
+                        <input 
+                          type="number"
+                          step="0.5"
+                          value={tm.hourlyRate}
+                          onChange={(e) => {
+                            const newTM = [...teamMembers];
+                            newTM[index].hourlyRate = Math.max(0, parseFloat(e.target.value) || 0);
+                            setTeamMembers(newTM);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-bold focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-0.5">Horas HH</span>
+                        <input 
+                          type="number"
+                          value={tm.hours}
+                          onChange={(e) => {
+                            const newTM = [...teamMembers];
+                            newTM[index].hours = Math.max(0, parseInt(e.target.value) || 0);
+                            setTeamMembers(newTM);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-white font-bold text-center focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2 text-right">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-0.5">Custo Subtotal</span>
+                        <span className="text-emerald-400 font-bold">R$ {(tm.hours * tm.hourlyRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2.6 DISTRIBUIÇÃO DAS HORAS (ATIVIDADES) */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-sky-400" />
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                      2.6 Distribuição das Horas (Atividades do Cronograma)
+                    </h4>
+                  </div>
+                  <span className="text-sky-400 text-xs font-mono font-bold bg-sky-500/10 px-3 py-1 rounded-full">
+                    Total: {financials.totalHH} Horas
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {activities.map((act, index) => (
+                    <div key={act.id} className="bg-slate-950 p-3 rounded-xl border border-slate-850 font-mono text-xs space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-white font-bold text-[11px]">{act.name}</span>
+                        <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                          act.category === "campo" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                          act.category === "escritorio" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20" :
+                          "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                        }`}>
+                          {act.category}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-slate-500 text-[8px] uppercase block">Horas (h)</span>
+                          <input 
+                            type="number"
+                            value={act.hours}
+                            onChange={(e) => {
+                              const newAct = [...activities];
+                              newAct[index].hours = Math.max(0, parseInt(e.target.value) || 0);
+                              setActivities(newAct);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white font-bold text-center"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-slate-500 text-[8px] uppercase block">Valor HH (R$)</span>
+                          <input 
+                            type="number"
+                            step="1"
+                            value={act.hourlyRate}
+                            onChange={(e) => {
+                              const newAct = [...activities];
+                              newAct[index].hourlyRate = Math.max(0, parseFloat(e.target.value) || 0);
+                              setActivities(newAct);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white font-bold text-center"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="text-right text-[10px] text-slate-400 pt-1 border-t border-slate-900">
+                        Custo: <strong className="text-emerald-400">R$ {(act.hours * act.hourlyRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* HORAS SUMMARY BANNER */}
+                <div className="p-4 bg-slate-950 rounded-xl border border-slate-850 grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono text-xs text-center">
+                  <div>
+                    <span className="text-slate-500 text-[9px] uppercase block">Campo</span>
+                    <strong className="text-amber-400 text-sm">{financials.fieldHours}h</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[9px] uppercase block">Escritório</span>
+                    <strong className="text-sky-400 text-sm">{financials.officeHours}h</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[9px] uppercase block">Administrativo</span>
+                    <strong className="text-purple-400 text-sm">{financials.adminHours}h</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[9px] uppercase block">Custo Mão de Obra Total</span>
+                    <strong className="text-emerald-400 text-sm">R$ {financials.totalLaborCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2.7 DESPESAS OPERACIONAIS E 2.8 DESPESAS ADMINISTRATIVAS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* 2.7 DESPESAS OPERACIONAIS */}
+                <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-amber-400" />
+                      <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                        2.7 Despesas Operacionais
+                      </h4>
+                    </div>
+                    <span className="text-amber-400 text-xs font-mono font-bold">
+                      R$ {financials.operationalCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {operationalExpenses.map((exp, index) => (
+                      <div key={exp.id} className="grid grid-cols-12 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-850 items-center font-mono text-xs">
+                        <div className="col-span-5 text-white font-bold truncate">
+                          {exp.name}
+                        </div>
+                        <div className="col-span-3">
+                          <input 
+                            type="number"
+                            value={exp.qty}
+                            onChange={(e) => {
+                              const newOps = [...operationalExpenses];
+                              newOps[index].qty = Math.max(0, parseFloat(e.target.value) || 0);
+                              setOperationalExpenses(newOps);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-white text-center text-[10px]"
+                            placeholder="Qtd"
+                          />
+                        </div>
+                        <div className="col-span-4">
+                          <input 
+                            type="number"
+                            step="0.5"
+                            value={exp.unitValue}
+                            onChange={(e) => {
+                              const newOps = [...operationalExpenses];
+                              newOps[index].unitValue = Math.max(0, parseFloat(e.target.value) || 0);
+                              setOperationalExpenses(newOps);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-white text-center text-[10px]"
+                            placeholder="R$ Unit"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2.8 DESPESAS ADMINISTRATIVAS */}
+                <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="h-4 w-4 text-purple-400" />
+                      <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                        2.8 Despesas Administrativas
+                      </h4>
+                    </div>
+                    <span className="text-purple-400 text-xs font-mono font-bold">
+                      R$ {financials.adminCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {adminExpenses.map((adm, index) => (
+                      <div key={adm.id} className="grid grid-cols-12 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-850 items-center font-mono text-xs">
+                        <div className="col-span-7 text-white font-bold truncate">
+                          {adm.name}
+                        </div>
+                        <div className="col-span-5">
+                          <input 
+                            type="number"
+                            step="0.01"
+                            value={adm.value}
+                            onChange={(e) => {
+                              const newAdms = [...adminExpenses];
+                              newAdms[index].value = Math.max(0, parseFloat(e.target.value) || 0);
+                              setAdminExpenses(newAdms);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white text-center text-[10px]"
+                            placeholder="R$ Valor"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
               {/* EDITABLE ESCOPO TÉCNICO DAS ATIVIDADES */}
               <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl space-y-4">
@@ -1539,7 +2216,7 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
                   <div className="flex items-center gap-2">
                     <Wrench className="h-4 w-4 text-sky-400" />
                     <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
-                      Etapa 2 – Personalizar Itens do Escopo Técnico
+                      Personalizar Itens do Escopo Técnico da Proposta
                     </h4>
                   </div>
                   <button
@@ -1555,9 +2232,6 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
                     + Adicionar Item
                   </button>
                 </div>
-                <p className="text-slate-400 text-[10px] leading-relaxed">
-                  Estes itens serão mostrados na tabela de <strong>Etapa 2: Escopo Técnico das Atividades</strong> na proposta gerada. Personalize-os livremente.
-                </p>
 
                 <div className="space-y-3">
                   {escopoItems.map((esc, index) => (
@@ -1590,7 +2264,7 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
                         />
                       </div>
                       <div className="md:col-span-7">
-                        <span className="text-slate-500 text-[9px] uppercase font-mono block mb-1">Descrição detalhada do procedimento</span>
+                        <span className="text-slate-500 text-[9px] uppercase font-mono block mb-1">Descrição detalhada</span>
                         <input
                           type="text"
                           value={esc.descricao}
@@ -1610,7 +2284,6 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
                             setEscopoItems(prev => prev.filter((_, idx) => idx !== index));
                           }}
                           className="w-full text-red-500 hover:text-red-400 p-1.5 rounded-lg border border-red-500/10 hover:border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-xs font-mono font-bold uppercase cursor-pointer text-center transition-all"
-                          title="Remover Item"
                         >
                           Apagar
                         </button>
@@ -1620,6 +2293,7 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
                 </div>
               </div>
 
+              {/* NAVIGATION BUTTONS */}
               <div className="flex justify-between items-center pt-4 border-t border-slate-800">
                 <button
                   onClick={() => setCurrentStep(1)}
@@ -1628,306 +2302,368 @@ export default function PricingModule({ clients }: { clients?: ClientData[] } = 
                   Voltar
                 </button>
                 <button
-                  onClick={() => {
-                    if (selectedServices.length === 0) {
-                      alert("Por favor, selecione pelo menos um serviço.");
-                      return;
-                    }
-                    setCurrentStep(3);
-                  }}
+                  onClick={() => setCurrentStep(3)}
                   className="bg-[#134074] hover:bg-[#1e5494] text-white text-xs font-bold font-mono tracking-wider uppercase px-6 py-3 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>Avançar: Precificação & Margem</span>
+                  <span>Avançar: Etapa 3 – Cálculo e Margem</span>
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 3: PRICING ENGINE */}
+          {/* STEP 3: CÁLCULO E FORMAÇÃO DA MARGEM COMERCIAL */}
           {currentStep === 3 && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="space-y-6">
               
-              {/* VARIABLES INPUT (LEFT 7 COLUMNS) */}
-              <div className="lg:col-span-7 bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-6">
-                <div className="border-b border-slate-800 pb-3 flex items-center gap-2">
-                  <Sliders className="h-5 w-5 text-[#4895EF]" />
-                  <h3 className="text-white text-sm font-bold uppercase tracking-wider font-mono">Etapa 3 – Variáveis Financeiras e Impostos</h3>
+              {/* HEADER ETAPA 3 */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-emerald-400" />
+                    <h3 className="text-white text-sm font-bold uppercase tracking-wider font-mono">
+                      Etapa 3 – Cálculo e Formação da Margem Comercial
+                    </h3>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
+                    financials.marketClassification === "Abaixo do Mercado"
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      : financials.marketClassification === "Dentro do Mercado"
+                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                      : "bg-red-500/10 text-red-400 border border-red-500/20"
+                  }`}>
+                    {financials.marketClassification}
+                  </span>
                 </div>
-
-                <div className="space-y-5 font-mono text-xs">
-                  
-                  {/* LOGISTICS SECTION */}
-                  <div className="space-y-4 bg-slate-950 p-4 rounded-xl border border-slate-900">
-                    <h4 className="text-slate-300 font-bold font-sans text-xs flex items-center gap-1.5">
-                      <Truck className="h-4 w-4 text-[#4895EF]" />
-                      <span>Despesas de Deslocamento e Logística</span>
-                    </h4>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400 text-[10px] uppercase">Distância Rodoviária (Km)</span>
-                          <span className="text-white font-bold">{travelKm} Km</span>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="800" 
-                          step="10"
-                          value={travelKm}
-                          onChange={(e) => setTravelKm(parseInt(e.target.value))}
-                          className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-800 rounded-lg"
-                        />
-                        <span className="text-[9px] text-slate-500">Calculado a R$ 1,50/Km para mobilização técnica</span>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400 text-[10px] uppercase">Diárias de Hospedagem</span>
-                          <span className="text-white font-bold">{lodgingDays} Dias</span>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="15" 
-                          value={lodgingDays}
-                          onChange={(e) => setLodgingDays(parseInt(e.target.value))}
-                          className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-800 rounded-lg"
-                        />
-                        <span className="text-[9px] text-slate-500">Calculado a R$ 250,00/diária</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* COMMERICALS SECTION */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <span className="text-slate-400 text-[10px] uppercase">Despesas Extras / Outras Despesas (R$)</span>
-                      <input 
-                        type="number" 
-                        value={extraExpenses} 
-                        onChange={(e) => setExtraExpenses(Math.max(0, parseFloat(e.target.value) || 0))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#4895EF]"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-slate-400 text-[10px] uppercase">Desconto Geral (%)</span>
-                      <div className="relative">
-                        <Percent className="absolute left-3 top-2.5 h-4 w-4 text-slate-600" />
-                        <input 
-                          type="number" 
-                          max="90"
-                          min="0"
-                          value={discountPercent} 
-                          onChange={(e) => setDiscountPercent(Math.min(90, Math.max(0, parseInt(e.target.value) || 0)))}
-                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-10 py-2 text-white focus:outline-none focus:border-[#4895EF]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-slate-400 text-[10px] uppercase">Aliquota de Impostos (%)</span>
-                      <input 
-                        type="number" 
-                        value={taxPercent} 
-                        onChange={(e) => setTaxPercent(Math.max(0, parseFloat(e.target.value) || 0))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#4895EF]"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 text-[10px] uppercase">Margem de Lucro (%)</span>
-                        <span className="text-[#4895EF] font-bold">{profitMargin}%</span>
-                      </div>
-                      <input 
-                        type="range" 
-                        min="10" 
-                        max="70" 
-                        value={profitMargin}
-                        onChange={(e) => setProfitMargin(parseInt(e.target.value))}
-                        className="w-full accent-blue-500 cursor-pointer h-1 bg-slate-800 rounded-lg"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-slate-400 text-[10px] uppercase">Valor Mínimo de Proposta (R$)</span>
-                      <input 
-                        type="number" 
-                        value={minPrice} 
-                        onChange={(e) => setMinPrice(Math.max(0, parseFloat(e.target.value) || 0))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#4895EF]"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-slate-400 text-[10px] uppercase">Prazo de Validade da Proposta (Dias)</span>
-                      <input 
-                        type="number" 
-                        value={validityDays} 
-                        onChange={(e) => setValidityDays(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#4895EF]"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-slate-400 text-[10px] uppercase">Prazo de Entrega dos Laudos (Dias Úteis)</span>
-                      <input 
-                        type="number" 
-                        value={deliveryDays} 
-                        onChange={(e) => setDeliveryDays(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#4895EF]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* NOTA FISCAL OPTION */}
-                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-900 flex items-center justify-between col-span-1 md:col-span-2">
-                    <div className="space-y-1 pr-4 text-left font-sans">
-                      <h4 className="text-white font-bold text-xs">Incluir Emissão de Nota Fiscal de Serviços (NFS-e)?</h4>
-                      <p className="text-[10px] text-slate-500 leading-normal">
-                        Se ativado, inclui &ldquo;Emissão de Nota Fiscal de Serviços (NFS-e)&rdquo; na lista de itens inclusos na proposta. Se desativado, o texto exibirá apenas CREA-PE (ART) e deslocamentos operacionais.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setHasNf(!hasNf)}
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        hasNf ? 'bg-emerald-500' : 'bg-slate-850'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          hasNf ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5 col-span-1 md:col-span-2">
-                    <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Termos e Condições de Pagamento</label>
-                    <textarea 
-                      rows={2}
-                      value={paymentTerms} 
-                      onChange={(e) => setPaymentTerms(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-850 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#4895EF] font-sans"
-                    />
-                  </div>
-
-                </div>
-
-                <div className="flex justify-between items-center pt-4 border-t border-slate-800">
-                  <button
-                    onClick={() => setCurrentStep(2)}
-                    className="bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold font-mono tracking-wider uppercase px-5 py-3 rounded-xl transition-all cursor-pointer"
-                  >
-                    Voltar
-                  </button>
-                  <button
-                    onClick={() => setCurrentStep(4)}
-                    className="bg-[#134074] hover:bg-[#1e5494] text-white text-xs font-bold font-mono tracking-wider uppercase px-6 py-3 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span>Avançar: Gerar Proposta</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
+                <p className="text-slate-400 text-xs">
+                  Consolidação automática dos custos apurados na Etapa 2, aplicação das margens estratégicas (Porte + Complexidade) e comparativo com a Tabela Mestre de Mercado.
+                </p>
               </div>
 
-              {/* LIVE PRICING SUMMARY PANEL (RIGHT 5 COLUMNS) */}
-              <div className="lg:col-span-5 space-y-6">
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-6 shadow-xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 h-16 w-16 bg-[#4895EF]/5 rounded-bl-full pointer-events-none"></div>
+              {/* MAIN CONTENT GRID */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* LEFT COLUMN: CONTROLES FINANCEIROS E MARGENS (7 COLS) */}
+                <div className="lg:col-span-7 space-y-6">
                   
-                  <h3 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
-                    <DollarSign className="h-4.5 w-4.5 text-emerald-400" />
-                    <span>Resumo Financeiro da Venda</span>
-                  </h3>
+                  {/* CONSOLIDAÇÃO DE CUSTOS DIRETOS */}
+                  <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4 overflow-hidden">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                      <Layers className="h-4 w-4 text-[#4895EF]" />
+                      <span>Consolidação dos Custos Diretos</span>
+                    </h4>
 
-                  <div className="space-y-4 font-mono text-xs">
-                    
-                    {/* MEMORIAL DE CÁLCULO DE 3 ETAPAS */}
-                    <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-900 text-left">
-                      <p className="text-[10px] text-[#4895EF] font-bold uppercase tracking-wider text-center border-b border-slate-900 pb-1.5">Memorial de Cálculo (3 Etapas)</p>
-                      
-                      <div className="space-y-1 text-[11px]">
-                        <div className="flex justify-between font-semibold text-sky-400">
-                          <span>1. Base H/H Técnico:</span>
-                          <span>R$ {financials.laborCost.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 pl-2">
-                          {technicalHours} horas × R$ {hourlyRate}/h
-                        </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-850 overflow-hidden min-w-0">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-1 truncate">Mão de Obra ({financials.totalHH}h)</span>
+                        <strong className="text-sky-400 text-xs sm:text-sm block truncate">
+                          R$ {financials.totalLaborCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>
                       </div>
 
-                      <div className="space-y-1 text-[11px] border-t border-slate-900/50 pt-1.5">
-                        <div className="flex justify-between font-semibold text-sky-300">
-                          <span>H/Trab. Documentação:</span>
-                          <span>R$ {financials.docLaborCost.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 pl-2">
-                          {docHours} horas × R$ {hourlyRate}/h
-                        </div>
+                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-850 overflow-hidden min-w-0">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-1 truncate">Custos Operacionais</span>
+                        <strong className="text-amber-400 text-xs sm:text-sm block truncate">
+                          R$ {financials.operationalCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>
                       </div>
 
-                      <div className="space-y-1 text-[11px] border-t border-slate-900/50 pt-1.5">
-                        <div className="flex justify-between font-semibold text-purple-400">
-                          <span>2. Custos Operacionais:</span>
-                          <span>R$ {(financials.directCostsSum - financials.laborCost - financials.docLaborCost).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 pl-2 space-y-0.5">
-                          <div>• Mobilização ({travelKm} Km): R$ {(travelKm * 1.5).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
-                          <div>• Hospedagem ({lodgingDays} d): R$ {(lodgingDays * 250).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
-                          <div>• Taxa de ART do CREA: R$ {artCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
-                          {extraExpenses > 0 && <div>• Outras despesas: R$ {extraExpenses.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>}
-                        </div>
+                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-850 overflow-hidden min-w-0">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-1 truncate">Custos Administrativos</span>
+                        <strong className="text-purple-400 text-xs sm:text-sm block truncate">
+                          R$ {financials.adminCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>
                       </div>
 
-                      <div className="space-y-1 text-[11px] border-t border-slate-900/50 pt-1.5">
-                        <div className="flex justify-between font-semibold text-emerald-400">
-                          <span>3. Formação de Valor:</span>
-                          <span>R$ {financials.subtotal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 pl-2 space-y-0.5">
-                          <div>• Custo Direto Total: R$ {financials.directCostsSum.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
-                          <div>• Margem Operacional ({profitMargin}%): +R$ {financials.profitValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
-                          <div>• Gross-up Impostos ({taxPercent}%): +R$ {financials.impostos.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {financials.descontos > 0 && (
-                      <div className="flex justify-between items-center text-emerald-400 border-b border-slate-900 pb-2">
-                        <span>Desconto Aplicado ({discountPercent}%):</span>
-                        <span>- R$ {financials.descontos.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-center text-slate-400 border-b border-slate-900 pb-2">
-                      <span>Equipamentos/Unidades:</span>
-                      <span className="text-white">{selectedServices.length * multiplierQty} unidades</span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-slate-400 border-b border-slate-900 pb-2">
-                      <span>Valor Médio por Unidade:</span>
-                      <span className="text-white">R$ {financials.valuePerEquipment.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-
-                    <div className="pt-4 flex flex-col justify-center items-center bg-slate-950 p-4 rounded-xl border border-slate-900 text-center">
-                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Investimento Total Líquido</p>
-                      <p className="text-2xl font-black text-emerald-400 mt-1">R$ {financials.totalGeral.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-[9px] mt-2 font-bold uppercase tracking-wider">
-                        Margem Operacional: {profitMargin}%
+                      <div className="bg-slate-950 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 overflow-hidden min-w-0">
+                        <span className="text-emerald-400 text-[9px] uppercase block mb-1 font-bold truncate">Custo Total Inviolável</span>
+                        <strong className="text-emerald-400 text-xs sm:text-sm block font-black truncate">
+                          R$ {financials.totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>
                       </div>
                     </div>
                   </div>
+
+                  {/* FORMAÇÃO DA MARGEM COMERCIAL */}
+                  <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                      <Percent className="h-4 w-4 text-emerald-400" />
+                      <span>Formação e Controle da Margem Comercial</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-850 space-y-1">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Margem por Porte do Cliente:</span>
+                          <span className="text-sky-400 font-bold">+{financials.porteMargin}%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">Com base no porte: {clientSize}</p>
+                      </div>
+
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-850 space-y-1">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Margem por Complexidade:</span>
+                          <span className="text-purple-400 font-bold">+{financials.complexityMargin}%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">Nível de complexidade: {complexity}</p>
+                      </div>
+                    </div>
+
+                    {/* MARGEM RECOMENDADA VS MANUAL */}
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-3 font-mono text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 font-bold">Margem Comercial Recomendada pelo Sistema:</span>
+                        <span className="text-emerald-400 font-black text-sm">{financials.recommendedMargin}%</span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-900">
+                        <label className="text-slate-400 text-[11px] cursor-pointer flex items-center gap-2">
+                          <input 
+                            type="checkbox"
+                            checked={autoMargin}
+                            onChange={(e) => setAutoMargin(e.target.checked)}
+                            className="rounded border-slate-800 bg-slate-900 text-emerald-500 focus:ring-0 h-4 w-4"
+                          />
+                          <span>Usar Margem Recomendada Automática ({financials.recommendedMargin}%)</span>
+                        </label>
+                      </div>
+
+                      {!autoMargin && (
+                        <div className="pt-2 space-y-1">
+                          <div className="flex justify-between text-slate-400 text-[10px]">
+                            <span>Margem Personalizada Ajustada Manualmente:</span>
+                            <span className="text-amber-400 font-bold">{customMarginPercent}%</span>
+                          </div>
+                          <input 
+                            type="range"
+                            min="5"
+                            max="80"
+                            value={customMarginPercent}
+                            onChange={(e) => setCustomMarginPercent(parseInt(e.target.value) || 0)}
+                            className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PARÂMETROS COMERCIAIS & IMPOSTOS */}
+                  <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                      <Sliders className="h-4 w-4 text-amber-400" />
+                      <span>Impostos, Prazos e Condições Comerciais</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px] uppercase">Alíquota de Imposto NFS-e (%)</span>
+                        <input 
+                          type="number"
+                          value={taxPercent}
+                          onChange={(e) => setTaxPercent(Math.max(0, parseFloat(e.target.value) || 0))}
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px] uppercase">Desconto Concedido (%)</span>
+                        <input 
+                          type="number"
+                          value={discountPercent}
+                          onChange={(e) => setDiscountPercent(Math.min(90, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px] uppercase">Validade da Proposta (Dias)</span>
+                        <input 
+                          type="number"
+                          value={validityDays}
+                          onChange={(e) => setValidityDays(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px] uppercase">Prazo de Entrega (Dias Úteis)</span>
+                        <input 
+                          type="number"
+                          value={deliveryDays}
+                          onChange={(e) => setDeliveryDays(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 text-[10px] uppercase font-mono block">Condições e Termos de Pagamento</label>
+                      <textarea 
+                        rows={2}
+                        value={paymentTerms}
+                        onChange={(e) => setPaymentTerms(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl p-3 text-xs text-white focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
                 </div>
 
-                <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-2xl flex gap-2.5 text-slate-400 text-xs leading-normal">
-                  <Info className="h-4.5 w-4.5 text-[#4895EF] shrink-0 mt-0.5" />
-                  <p>A margem recomendada para serviços técnicos periciais com emissão de ART é de no mínimo <strong>30%</strong> para cobertura de seguros corporativos e contingências operacionais.</p>
+                {/* RIGHT COLUMN: EXECUTIVE FINANCIAL DASHBOARD (5 COLS) */}
+                <div className="lg:col-span-5 space-y-6">
+                  
+                  {/* EXECUTIVE SUMMARY DASHBOARD CARD */}
+                  <div className="bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl space-y-5 shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 h-20 w-20 bg-emerald-500/10 rounded-bl-full pointer-events-none" />
+                    
+                    <h3 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center justify-between gap-2 border-b border-slate-800 pb-3 overflow-hidden">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <TrendingUp className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">Painel Resumido de Indicadores</span>
+                      </div>
+                      <span className="text-[9px] font-mono text-slate-500 shrink-0">Auditoria Automática</span>
+                    </h3>
+
+                    {/* CARD GRID OF 4 METRIC BOXES */}
+                    <div className="space-y-3 font-mono">
+                      
+                      {/* BOX 1: ESTRUTURA DE CUSTOS */}
+                      <div className="bg-slate-950 p-3.5 sm:p-4 rounded-xl border border-slate-850 space-y-2 overflow-hidden min-w-0">
+                        <div className="flex justify-between items-center gap-2 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-900 pb-1">
+                          <span className="truncate">1. Estrutura de Custos</span>
+                          <span className="text-sky-400 font-mono shrink-0">{financials.totalHH} Horas</span>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Mão de Obra Técnica:</span>
+                            <span className="text-white font-semibold shrink-0">R$ {financials.totalLaborCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Despesas Operacionais:</span>
+                            <span className="text-white font-semibold shrink-0">R$ {financials.operationalCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Despesas Administrativas:</span>
+                            <span className="text-white font-semibold shrink-0">R$ {financials.adminCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 font-bold text-emerald-400 pt-1 border-t border-slate-900">
+                            <span className="truncate">Custo Total do Serviço:</span>
+                            <span className="shrink-0">R$ {financials.totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BOX 2: FORMAÇÃO DE PREÇO */}
+                      <div className="bg-slate-950 p-3.5 sm:p-4 rounded-xl border border-slate-850 space-y-2 overflow-hidden min-w-0">
+                        <div className="flex justify-between items-center gap-2 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-900 pb-1">
+                          <span className="truncate">2. Formação de Preço</span>
+                          <span className="text-emerald-400 shrink-0">{financials.appliedMarginPct}% Margem</span>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Valor da Margem:</span>
+                            <span className="text-emerald-400 font-semibold shrink-0">R$ {financials.marginValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Preço sem Impostos:</span>
+                            <span className="text-white font-semibold shrink-0">R$ {financials.preTaxPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Impostos NFS-e ({taxPercent}%):</span>
+                            <span className="text-amber-400 font-semibold shrink-0">R$ {financials.impostos.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          {financials.discountVal > 0 && (
+                            <div className="flex justify-between items-center gap-2 text-red-400">
+                              <span className="truncate">Desconto ({discountPercent}%):</span>
+                              <span className="font-semibold shrink-0">- R$ {financials.discountVal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* BOX 3: COMPARATIVO DE MERCADO */}
+                      <div className="bg-slate-950 p-3.5 sm:p-4 rounded-xl border border-slate-850 space-y-2 overflow-hidden min-w-0">
+                        <div className="flex justify-between items-center gap-2 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-900 pb-1">
+                          <span className="truncate">3. Comparativo Tabela Mestre</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${
+                            financials.marketClassification === "Abaixo do Mercado" ? "bg-emerald-500/20 text-emerald-400" :
+                            financials.marketClassification === "Dentro do Mercado" ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"
+                          }`}>{financials.marketClassification}</span>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Média de Mercado:</span>
+                            <span className="text-slate-300 font-semibold shrink-0">R$ {financials.marketAverageValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Diferença para Média:</span>
+                            <span className={`font-semibold shrink-0 ${financials.marketDiffVal <= 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                              {financials.marketDiffVal > 0 ? "+" : ""}R$ {financials.marketDiffVal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} ({financials.marketDiffPct > 0 ? "+" : ""}{financials.marketDiffPct.toFixed(1)}%)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BOX 4: RENTABILIDADE & INDICADORES EXECUTIVOS */}
+                      <div className="bg-slate-950 p-3.5 sm:p-4 rounded-xl border border-slate-850 space-y-2 overflow-hidden min-w-0">
+                        <div className="text-slate-400 text-[10px] uppercase font-bold border-b border-slate-900 pb-1 truncate">
+                          4. Rentabilidade & Eficiência
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                          <div className="min-w-0 overflow-hidden">
+                            <span className="text-slate-500 text-[9px] block truncate">Lucro Bruto R$</span>
+                            <strong className="text-emerald-400 text-xs sm:text-sm block truncate">R$ {financials.profitBruto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                          </div>
+                          <div className="min-w-0 overflow-hidden">
+                            <span className="text-slate-500 text-[9px] block truncate">Margem Líquida Real</span>
+                            <strong className="text-emerald-400 text-xs sm:text-sm block truncate">{financials.profitMarginPct.toFixed(1)}%</strong>
+                          </div>
+                          <div className="min-w-0 overflow-hidden">
+                            <span className="text-slate-500 text-[9px] block truncate">Custo por HH</span>
+                            <strong className="text-slate-300 text-xs block truncate">R$ {financials.costPerHH.toFixed(2)}/h</strong>
+                          </div>
+                          <div className="min-w-0 overflow-hidden">
+                            <span className="text-slate-500 text-[9px] block truncate">Receita por HH</span>
+                            <strong className="text-sky-400 text-xs block truncate">R$ {financials.revenuePerHH.toFixed(2)}/h</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BIG PRICE BANNER */}
+                      <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-1 overflow-hidden min-w-0">
+                        <span className="text-[10px] text-emerald-400 uppercase font-mono font-bold tracking-widest block truncate">
+                          Investimento Total da Proposta
+                        </span>
+                        <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight break-all sm:break-normal">
+                          R$ {financials.totalGeral.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-mono block truncate">
+                          Composição: Impostos ({taxPercent}%) + ART + Escopo Integral
+                        </span>
+                      </div>
+
+                    </div>
+                  </div>
+
                 </div>
+
+              </div>
+
+              {/* STEP 3 NAVIGATION BUTTONS */}
+              <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+                <button
+                  onClick={() => setCurrentStep(2)}
+                  className="bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold font-mono tracking-wider uppercase px-5 py-3 rounded-xl transition-all cursor-pointer"
+                >
+                  Voltar para Escopo
+                </button>
+                <button
+                  onClick={() => setCurrentStep(4)}
+                  className="bg-[#134074] hover:bg-[#1e5494] text-white text-xs font-bold font-mono tracking-wider uppercase px-6 py-3 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Avançar: Gerar Proposta Comercial</span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
 
             </div>
