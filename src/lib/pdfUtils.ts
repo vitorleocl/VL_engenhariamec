@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 /**
  * Utility functions for clean PDF generation using html2pdf.js
  * and bypassing the oklch parser crash in html2canvas.
+ * Build trigger: 2026-08-08 - Final A4 alignment, Word export & VL Engenharia logo preservation.
  */
 
 /**
