@@ -1186,11 +1186,11 @@ export async function exportToWord(elementId: string, filename: string): Promise
     </html>
   `;
 
-  const cleanFilename = filename.toLowerCase().endsWith('.docx')
+  const cleanFilename = filename.toLowerCase().endsWith('.doc')
     ? filename
-    : filename.replace(/\.doc$/i, '') + '.docx';
+    : filename.replace(/\.docx$/i, '') + '.doc';
 
-  const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document;charset=utf-8' });
+  const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

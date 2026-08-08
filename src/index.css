@@ -333,4 +333,44 @@ body.editor-fullscreen-active .dashboard-main-content {
   width: 100% !important;
 }
 
+/* PDF Generation Mode Strict A4 Alignment & Zero Margin Rules */
+body.pdf-rendering-mode #printable_laudo_document,
+#printable_laudo_document.pdf-rendering-mode {
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 794px !important;
+  min-width: 794px !important;
+  max-width: 794px !important;
+  transform: none !important;
+  zoom: 1 !important;
+  box-shadow: none !important;
+  border: none !important;
+  background: #ffffff !important;
+  z-index: 999999 !important;
+}
+
+body.pdf-rendering-mode .laudo-page-block,
+#printable_laudo_document.pdf-rendering-mode .laudo-page-block {
+  width: 794px !important;
+  min-width: 794px !important;
+  max-width: 794px !important;
+  min-height: 1122px !important;
+  height: 1122px !important;
+  max-height: 1122px !important;
+  margin: 0 !important;
+  padding: 45px 56px !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  background: #ffffff !important;
+  position: relative !important;
+  page-break-after: always !important;
+  break-after: page !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+}
+
 

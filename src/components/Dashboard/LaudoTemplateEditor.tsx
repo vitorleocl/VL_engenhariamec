@@ -1031,6 +1031,11 @@ export default function LaudoTemplateEditor({
     let element: HTMLElement | null = null;
     let originalTransform = '';
     let originalMargin = '';
+    let originalPosition = '';
+    let originalLeft = '';
+    let originalTop = '';
+    let originalZIndex = '';
+    let originalWidth = '';
 
     try {
       if (activeTab !== 'preview') {
@@ -1050,11 +1055,23 @@ export default function LaudoTemplateEditor({
       const images = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
       await Promise.all(images.map(img => convertImageToBase64(img)));
 
-      // Temporarily clear zoom/transform and margin on printable element so html2canvas captures at true dimensions
+      // Save original inline styles
       originalTransform = element.style.transform;
       originalMargin = element.style.margin;
+      originalPosition = element.style.position;
+      originalLeft = element.style.left;
+      originalTop = element.style.top;
+      originalZIndex = element.style.zIndex;
+      originalWidth = element.style.width;
+
+      // Position element fixed at top left 0,0 during capture so html2canvas captures with ZERO offset or lateral clipping
+      element.style.position = 'fixed';
+      element.style.top = '0';
+      element.style.left = '0';
+      element.style.zIndex = '999999';
       element.style.transform = 'none';
       element.style.margin = '0';
+      element.style.width = '794px';
 
       // Apply strict PDF capture attributes
       element.setAttribute('data-pdf-mode', 'true');
@@ -1151,6 +1168,11 @@ export default function LaudoTemplateEditor({
       if (element) {
         element.style.transform = originalTransform;
         element.style.margin = originalMargin;
+        element.style.position = originalPosition;
+        element.style.left = originalLeft;
+        element.style.top = originalTop;
+        element.style.zIndex = originalZIndex;
+        element.style.width = originalWidth;
         element.removeAttribute('data-pdf-mode');
         element.classList.remove('pdf-rendering-mode');
       }
@@ -1160,14 +1182,14 @@ export default function LaudoTemplateEditor({
     }
   };
 
-  // Export DOCX
+  // Export DOCX / Word
   const handleExportDOCX = async () => {
     if (activeTab !== 'preview') {
       setActiveTab('preview');
       await new Promise(resolve => setTimeout(resolve, 200));
     }
-    showToast('Exportando arquivo DOCX / Word com formatação preservada...');
-    await exportToWord('printable_laudo_document', `${variables.numero_laudo || 'LAUDO'}.docx`);
+    showToast('Exportando arquivo Word (.doc) com formatação preservada...');
+    await exportToWord('printable_laudo_document', `${variables.numero_laudo || 'LAUDO'}.doc`);
   };
 
   // Filter templates list
