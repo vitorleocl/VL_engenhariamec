@@ -1,0 +1,50 @@
+<svg viewBox="0 0 540 160" width="1080" height="320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#FFFFFF"/>
+  <defs>
+    <linearGradient id="silver-metal-logo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8f9fa" />
+      <stop offset="25%" stop-color="#ced4da" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="75%" stop-color="#adb5bd" />
+      <stop offset="100%" stop-color="#6c757d" />
+    </linearGradient>
+    <g id="gear-tooth-logo">
+      <path d="M -6,-52 L -4,-64 L 4,-64 L 6,-52 Z" fill="url(#silver-metal-logo)" stroke="#495057" stroke-width="0.5" />
+    </g>
+  </defs>
+  <g id="monogram-emblem">
+    <path d="M 55,35 A 56,56 0 0,1 138,55" stroke="url(#silver-metal-logo)" stroke-width="4" stroke-linecap="round" fill="none" />
+    <circle cx="85" cy="80" r="52" stroke="url(#silver-metal-logo)" stroke-width="5.5" fill="none" />
+    <path d="M 55,41 A 52,52 0 0,1 131,63" stroke="#0f284e" stroke-width="4.5" stroke-linecap="round" fill="none" />
+    <g transform="translate(85, 80)">
+      <g transform="rotate(110)"><use href="#gear-tooth-logo" /></g>
+      <g transform="rotate(130)"><use href="#gear-tooth-logo" /></g>
+      <g transform="rotate(150)"><use href="#gear-tooth-logo" /></g>
+      <g transform="rotate(170)"><use href="#gear-tooth-logo" /></g>
+      <g transform="rotate(190)"><use href="#gear-tooth-logo" /></g>
+      <g transform="rotate(210)"><use href="#gear-tooth-logo" /></g>
+      <g transform="rotate(230)"><use href="#gear-tooth-logo" /></g>
+      <g transform="rotate(250)"><use href="#gear-tooth-logo" /></g>
+    </g>
+    <circle cx="85" cy="80" r="44" stroke="url(#silver-metal-logo)" stroke-width="1.2" stroke-dasharray="3 3" fill="none" />
+    <g transform="translate(85, 80)">
+      <path d="M -40,-28 L -17,-28 L 0,20 L 17,-28 L 31,-28 L -2,34 L -10,34 Z" fill="#0f284e" />
+      <path d="M 37,-28 L 50,-28 L 25,18 L 58,18 L 49,34 L 4,34 Z" fill="#0066d4" />
+    </g>
+  </g>
+  <line x1="165" y1="30" x2="165" y2="130" stroke-width="1.5" stroke="#cbd5e1" />
+  <g id="brand-text">
+    <text x="180" y="74" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="41" fill="#0B2545">VL</text>
+    <text x="240" y="74" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="41" fill="#105FD3">ENGENHARIA</text>
+    <line x1="180" y1="92" x2="520" y2="92" stroke-width="1.5" stroke="#cbd5e1" />
+    <g transform="translate(350, 92)" stroke="#94a3b8" stroke-width="1.5">
+      <circle cx="0" cy="0" r="5" fill="#FFFFFF" />
+      <circle cx="0" cy="0" r="1.5" fill="none" />
+      <line x1="0" y1="-7" x2="0" y2="7" />
+      <line x1="-7" y1="0" x2="7" y2="0" />
+      <line x1="-5" y1="-5" x2="5" y2="5" />
+      <line x1="5" y1="-5" x2="-5" y2="5" />
+    </g>
+    <text x="350" y="118" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="10" letter-spacing="1.8" fill="#64748b">INSPEÇÕES  •  LAUDOS TÉCNICOS  •  ENGENHARIA MECÂNICA</text>
+  </g>
+</svg>

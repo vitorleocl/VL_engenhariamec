@@ -1,0 +1,4194 @@
+import React, { useState, useEffect, useRef } from "react";
+import { 
+  Calculator, 
+  Settings, 
+  History, 
+  DollarSign, 
+  Percent, 
+  FileText, 
+  Sparkles, 
+  AlertTriangle, 
+  Trash2, 
+  Copy, 
+  CheckCircle, 
+  X, 
+  Plus, 
+  Search, 
+  MapPin, 
+  Truck, 
+  Clock, 
+  Building2, 
+  User, 
+  Mail, 
+  Briefcase, 
+  Info,
+  ArrowRight,
+  Download,
+  Check,
+  Eye,
+  Share2,
+  Sliders,
+  Printer,
+  ChevronRight,
+  Shield,
+  Phone,
+  Edit,
+  Wrench,
+  TrendingUp,
+  BarChart3,
+  PieChart,
+  Target,
+  Layers,
+  Users,
+  CheckSquare
+} from "lucide-react";
+// @ts-ignore
+import html2pdf from "html2pdf.js";
+import Logo from "../Logo";
+import ClientSelector from "./ClientSelector";
+import { ClientData } from "../../types";
+import { isRealFirebase, db } from "../../lib/firebase";
+import { collection, getDocs, doc, setDoc, onSnapshot } from "firebase/firestore";
+import { preprocessStylesheets, restoreStylesheets } from "../../lib/pdfUtils";
+import { getGeneratorLaudos, subscribeToGeneratorLaudos, SavedGeneratorLaudo } from "../../lib/generatorStorage";
+// @ts-ignore
+import capaBg from "../../assets/images/capa_bg_1784159920711.jpg";
+// @ts-ignore
+import contracapaBg from "../../assets/images/contracapa_bg_1784159930602.jpg";
+// @ts-ignore
+import firebaseConfig from "../../../firebase-applet-config.json";
+
+const hasRealConfig = firebaseConfig && firebaseConfig.apiKey && firebaseConfig.apiKey !== 'MOCK_API_KEY' && !firebaseConfig.apiKey.includes('YOUR_');
+
+export const PORTE_MARGINS: Record<string, number> = {
+  "Pessoa Física": 10,
+  "MEI": 12,
+  "Microempresa": 15,
+  "Pequena Empresa": 18,
+  "Média Empresa": 22,
+  "Grande Empresa": 28,
+  "Indústria": 32,
+};
+
+export const COMPLEXITY_MARGINS: Record<string, { margin: number; hhMult: number; label: string }> = {
+  "Baixa": { margin: 10, hhMult: 0.8, label: "Baixa" },
+  "Normal": { margin: 15, hhMult: 1.0, label: "Normal" },
+  "Alta": { margin: 25, hhMult: 1.3, label: "Alta" },
+  "Muito Alta": { margin: 35, hhMult: 1.6, label: "Muito Alta" },
+};
+
+export interface TeamMember {
+  id: string;
+  role: string;
+  hourlyRate: number;
+  hours: number;
+}
+
+export interface ActivityHour {
+  id: string;
+  name: string;
+  category: "campo" | "escritorio" | "administrativo";
+  hours: number;
+  hourlyRate: number;
+}
+
+export interface OperationalExpense {
+  id: string;
+  name: string;
+  qty: number;
+  unitValue: number;
+}
+
+export interface AdminExpense {
+  id: string;
+  name: string;
+  value: number;
+}
+
+const HOURLY_ROLES = [
+  { label: "Técnico (R$ 19,22)", value: 19.22 },
+  { label: "Proj. Mec Júnior (R$ 28,90)", value: 28.90 },
+  { label: "Proj. Mec Pleno (R$ 34,11)", value: 34.11 },
+  { label: "Proj. Mec Master (R$ 38,90)", value: 38.90 },
+  { label: "Engenheiro Júnior (R$ 43,75)", value: 43.75 },
+  { label: "Engenheiro Pleno (R$ 55,00)", value: 55.00 },
+  { label: "Engenheiro Senior (R$ 75,00)", value: 75.00 },
+  { label: "Engenheiro Master (R$ 95,00)", value: 95.00 },
+];
+
+// Pre-registered Services Data (Etapa 2)
+interface ServiceTemplate {
+  id: string;
+  name: string;
+  category: "Industrial" | "Predial" | "Veicular" | "Outros";
+  basePrice: number;
+  marketMin: number;
+  marketMax: number;
+  marketAvg: number;
+  norms: string[];
+  scope: string[];
+  durationDays: number;
+  hours: number;
+  professionals: number;
+  description: string;
+}
+
+const PRE_REGISTERED_SERVICES: ServiceTemplate[] = [
+  {
+    id: "serv-nr12",
+    name: "Laudo de Adequação NR-12",
+    category: "Industrial",
+    basePrice: 1800,
+    marketMin: 1200,
+    marketMax: 3200,
+    marketAvg: 2200,
+    norms: ["NR-12 (Segurança em Máquinas)", "ABNT NBR ISO 12100:2013", "ABNT NBR 14153"],
+    scope: [
+      "Inventário de máquinas e equipamentos industriais",
+      "Mapeamento de riscos e pontos de perigo físico/mecânico",
+      "Análise de categorias de segurança (Sistemas de comando)",
+      "Emissão de ART de adequação técnica"
+    ],
+    durationDays: 5,
+    hours: 24,
+    professionals: 2,
+    description: "Inspeção técnica completa, mapeamento detalhado de pontos de perigo físico e elétrico, cálculo de riscos por máquina e elaboração de plano de ação."
+  },
+  {
+    id: "serv-nr13",
+    name: "Laudo de Integridade Física / NR-13",
+    category: "Industrial",
+    basePrice: 1200,
+    marketMin: 800,
+    marketMax: 2200,
+    marketAvg: 1500,
+    norms: ["NR-13 (Caldeiras e Vasos de Pressão)", "ASME Seção VIII Div. 1", "ABNT NBR ISO 16528"],
+    scope: [
+      "Inspeção visual e dimensional externa/interna",
+      "Medição de espessura por ultrassom (corrosão de parede)",
+      "Cálculo de Pressão Máxima de Trabalho Admissível (PMTA)",
+      "Exame de estanqueidade e teste hidrostático"
+    ],
+    durationDays: 3,
+    hours: 16,
+    professionals: 1,
+    description: "Inspeção e ensaios não destrutivos de caldeiras, vasos de pressão, tanques metálicos e tubulações de vapor em conformidade com as regras federais."
+  },
+  {
+    id: "serv-pmoc",
+    name: "Plano de Manutenção PMOC",
+    category: "Predial",
+    basePrice: 1500,
+    marketMin: 900,
+    marketMax: 2800,
+    marketAvg: 1800,
+    norms: ["Portaria MS n° 3.523/98", "Lei Federal 13.589/18", "Resolução RE 09/ANVISA"],
+    scope: [
+      "Levantamento da carga térmica total do sistema central",
+      "Criação das rotinas de manutenção preventiva mensal/anual",
+      "Mapeamento biológico e análise laboratorial da qualidade do ar",
+      "ART de Responsabilidade Técnica sobre Climatização"
+    ],
+    durationDays: 4,
+    hours: 18,
+    professionals: 1,
+    description: "Plano de Manutenção, Operação e Controle para sistemas de ar condicionado central, otimizando a qualidade do ar em edifícios comerciais e hospitalares."
+  },
+  {
+    id: "serv-play",
+    name: "Laudo de Playground",
+    category: "Predial",
+    basePrice: 850,
+    marketMin: 600,
+    marketMax: 1500,
+    marketAvg: 980,
+    norms: ["ABNT NBR 16071 (Playgrounds)", "ABNT NBR 15860"],
+    scope: [
+      "Avaliação de desgaste estrutural e corrosão de brinquedos",
+      "Teste de impacto e integridade de pisos amortecedores",
+      "Inspeção de rotas de fuga e zonas de queda",
+      "Relatório fotográfico com laudo de adequação para condomínios"
+    ],
+    durationDays: 2,
+    hours: 8,
+    professionals: 1,
+    description: "Inspeção detalhada de brinquedos de parques infantis em condomínios e escolas, verificando fixação, soldas, pregos, pontas cortantes e riscos de quedas."
+  },
+  {
+    id: "serv-munck",
+    name: "Laudo de Caminhão Munck",
+    category: "Veicular",
+    basePrice: 950,
+    marketMin: 700,
+    marketMax: 1800,
+    marketAvg: 1200,
+    norms: ["NR-11 (Transporte de Cargas)", "ABNT NBR 14768 (Guindastes articulados)"],
+    scope: [
+      "Ensaio de partículas magnéticas ou líquido penetrante em soldas",
+      "Medição de desgaste em pinos e buchas hidráulicas",
+      "Inspeção de patolas estabilizadoras e travas de segurança",
+      "Emissão de laudo técnico de integridade e ART"
+    ],
+    durationDays: 2,
+    hours: 10,
+    professionals: 1,
+    description: "Vistoria mecânica e ensaio estrutural em guindauto (caminhão munck) para homologação e segurança em movimentação pesada de cargas industriais."
+  },
+  {
+    id: "serv-guindaste",
+    name: "Laudo de Guindaste / Rigging",
+    category: "Veicular",
+    basePrice: 1400,
+    marketMin: 1000,
+    marketMax: 2500,
+    marketAvg: 1750,
+    norms: ["NR-11", "ASME B30.5", "ABNT NBR 14768"],
+    scope: [
+      "Inspeção ultrassônica estrutural de lanças telescópicas",
+      "Verificação de cabos de aço, ganchos e polias",
+      "Análise de tabelas de carga dinâmica",
+      "ART técnica de rigging/movimentação"
+    ],
+    durationDays: 3,
+    hours: 14,
+    professionals: 1,
+    description: "Inspeção completa de integridade estrutural e segurança mecânica de guindastes industriais de grande porte."
+  },
+  {
+    id: "serv-monta",
+    name: "Reclassificação de Monta Veicular",
+    category: "Veicular",
+    basePrice: 900,
+    marketMin: 650,
+    marketMax: 1600,
+    marketAvg: 1100,
+    norms: ["Resoluções CONTRAN 810/20 e 848/21", "Portarias SENATRAN"],
+    scope: [
+      "Avaliação detalhada dos danos estruturais pós-sinistro",
+      "Cruzamento com a planilha de pontuação oficial do CONTRAN",
+      "Laudo de recuperação e segurança do monobloco",
+      "ART técnica com liberação no prontuário do DETRAN"
+    ],
+    durationDays: 2,
+    hours: 8,
+    professionals: 1,
+    description: "Laudo técnico pericial de engenharia mecânica para baixar a monta de veículos acidentados de média para pequena monta, permitindo a regularização do documento."
+  },
+  {
+    id: "serv-inspe",
+    name: "Inspeção Veicular Escolar/Frotas",
+    category: "Veicular",
+    basePrice: 750,
+    marketMin: 500,
+    marketMax: 1300,
+    marketAvg: 880,
+    norms: ["Resolução CONTRAN", "NBR 14040"],
+    scope: [
+      "Inspeção detalhada de sistemas de frenagem, suspensão e direção",
+      "Verificação de cintos de segurança, tacógrafo e tacômetro",
+      "Laudo de conformidade mecânica do veículo rodoviário"
+    ],
+    durationDays: 2,
+    hours: 8,
+    professionals: 1,
+    description: "Auditoria mecânica preventiva e corretiva de veículos destinados ao transporte coletivo escolar ou frotas corporativas de logística."
+  },
+  {
+    id: "serv-sinistro",
+    name: "Laudo de Avaliação de Sinistro Veicular",
+    category: "Veicular",
+    basePrice: 1100,
+    marketMin: 750,
+    marketMax: 1900,
+    marketAvg: 1350,
+    norms: ["Resolução CONTRAN 810/2020", "Manual Brasileiro de Inspeção Veicular", "Código de Trânsito Brasileiro"],
+    scope: [
+      "Vistoria física detalhada do veículo in loco pós-sinistro",
+      "Mapeamento completo de componentes estruturais e monobloco",
+      "Preenchimento de Checklist Pericial Estrutural (dinâmico)",
+      "Análise de fotos, enquadramento de monta ou classificação de frota",
+      "Emissão de Parecer Conclusivo de Engenharia e ART oficial"
+    ],
+    durationDays: 2,
+    hours: 12,
+    professionals: 1,
+    description: "Laudo pericial de engenharia mecânica veicular para avaliação de extensão de danos e enquadramento técnico-legal após sinistros e colisões."
+  },
+  {
+    id: "serv-apr",
+    name: "APR (Análise Preliminar de Risco)",
+    category: "Outros",
+    basePrice: 650,
+    marketMin: 450,
+    marketMax: 1200,
+    marketAvg: 800,
+    norms: ["NR-01 (Disposições Gerais)", "ISO 31000 (Gestão de Riscos)"],
+    scope: [
+      "Levantamento e catalogação de perigos operacionais",
+      "Estudo de probabilidade de acidentes severos",
+      "Proposição de barreiras de segurança física e administrativas"
+    ],
+    durationDays: 1,
+    hours: 6,
+    professionals: 1,
+    description: "Análise técnica preliminar de segurança ocupacional e mecânica para frentes de trabalho temporárias ou novos processos industriais."
+  },
+  {
+    id: "serv-projeto",
+    name: "Projeto Mecânico e Memorial",
+    category: "Industrial",
+    basePrice: 2200,
+    marketMin: 1500,
+    marketMax: 4200,
+    marketAvg: 2800,
+    norms: ["ABNT NBR ISO", "SolidWorks Design Standards"],
+    scope: [
+      "Estudos preliminares e modelagem 3D computacional",
+      "Cálculo estrutural por Elementos Finitos (FEA)",
+      "Memorial descritivo de cálculo e dimensionamento mecânico",
+      "Emissão de desenho técnico e ART de projeto"
+    ],
+    durationDays: 10,
+    hours: 40,
+    professionals: 2,
+    description: "Desenvolvimento técnico completo de componentes mecânicos estruturais, dispositivos de içamento, pórticos e suportes em aço."
+  }
+];
+
+export interface Proposal {
+  id: string;
+  clientCompany: string;
+  clientName: string;
+  clientCnpj: string;
+  clientCity: string;
+  clientState: string;
+  clientContact: string;
+  clientEmail: string;
+  clientRole?: string;
+  clientAddress?: string;
+  services: {
+    id: string;
+    name: string;
+    description: string;
+    basePrice: number;
+    norms: string[];
+    scope: string[];
+    durationDays?: number;
+  }[];
+  pricingInfo: {
+    subtotal: number;
+    descontos: number;
+    impostos: number;
+    totalGeral: number;
+    estimatedHours: number;
+    estimatedTeamSize: number;
+    paymentTerms: string;
+    validityDays: number;
+    executionWeeks: number;
+    multiplierQty?: number;
+    technicalHours?: number;
+    docHours?: number;
+    hourlyRate?: number;
+    travelKm?: number;
+    lodgingDays?: number;
+    artCost?: number;
+    extraExpenses?: number;
+    discountPercent?: number;
+    taxPercent?: number;
+    profitMargin?: number;
+    minPrice?: number;
+  };
+  aiObjective?: string;
+  aiScope?: string[];
+  aiNorms?: string[];
+  aiObservations?: string[];
+  aiExclusions?: string[];
+  aiComplementary?: string[];
+  status: "rascunho" | "enviado" | "aprovado";
+  paid?: boolean;
+  associatedLaudoId?: string;
+  associatedLaudoTitle?: string;
+  signature?: string;
+  signedAt?: string;
+  signedByName?: string;
+  signedByRole?: string;
+  images?: string[];
+  demandDescription?: string;
+  deliveryDays?: number;
+  visibleSections?: {
+    capa: boolean;
+    contracapa: boolean;
+    principios: boolean;
+    entregamos: boolean;
+    problemas: boolean;
+    clientes: boolean;
+    resumoServicos: boolean;
+    identificacao: boolean;
+    equipe: boolean;
+    atividades: boolean;
+    investimento: boolean;
+    condicoes: boolean;
+    prazos: boolean;
+    assinatura: boolean;
+  };
+  hasNf?: boolean;
+  escopoItems?: { item: string; atividade: string; descricao: string }[];
+}
+
+export default function PricingModule({ clients }: { clients?: ClientData[] } = {}) {
+  const [activeTab, setActiveTab] = useState<"new" | "history" | "market">("new");
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+  const [historyList, setHistoryList] = useState<Proposal[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
+
+  // Associated AI Generator Laudos
+  const [savedGeneratorLaudos, setSavedGeneratorLaudos] = useState<SavedGeneratorLaudo[]>([]);
+  const [selectedAssociatedLaudoId, setSelectedAssociatedLaudoId] = useState<string>("");
+  const [selectedAssociatedLaudoTitle, setSelectedAssociatedLaudoTitle] = useState<string>("");
+
+  useEffect(() => {
+    getGeneratorLaudos().then(list => setSavedGeneratorLaudos(list)).catch(err => console.error(err));
+    const unsub = subscribeToGeneratorLaudos((list) => {
+      setSavedGeneratorLaudos(list);
+    });
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
+
+  // ETAPA 1 - Dados do Cliente State
+  const [clientCompany, setClientCompany] = useState("");
+  const [clientCnpj, setClientCnpj] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientRole, setClientRole] = useState("");
+  const [clientAddress, setClientAddress] = useState("");
+  const [clientCity, setClientCity] = useState("Recife");
+  const [clientState, setClientState] = useState("PE");
+  const [clientContact, setClientContact] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+
+  // ETAPA 2 - Dados do Serviço e Escopo
+  const [selectedServices, setSelectedServices] = useState<ServiceTemplate[]>([]);
+
+  // 2.1 Informações Gerais
+  const [appliedNorm, setAppliedNorm] = useState("NR-12 / ABNT NBR ISO 12100");
+  const [distanceKm, setDistanceKm] = useState<number>(50);
+  const [technicalVisits, setTechnicalVisits] = useState<number>(1);
+  const [daysInField, setDaysInField] = useState<number>(2);
+
+  // 2.2 Características do Serviço
+  const [qtyEquipments, setQtyEquipments] = useState<number>(1);
+  const [qtyMachines, setQtyMachines] = useState<number>(0);
+  const [qtyRooms, setQtyRooms] = useState<number>(0);
+  const [qtySystems, setQtySystems] = useState<number>(0);
+  const [builtAreaM2, setBuiltAreaM2] = useState<number>(0);
+  const [climatizedAreaM2, setClimatizedAreaM2] = useState<number>(0);
+  const [qtyFloors, setQtyFloors] = useState<number>(1);
+  const [installedPower, setInstalledPower] = useState<number>(0);
+  const [totalBtu, setTotalBtu] = useState<number>(0);
+  const [qtyReports, setQtyReports] = useState<number>(1);
+  const [qtyArts, setQtyArts] = useState<number>(1);
+  const [specificParamsText, setSpecificParamsText] = useState<string>("");
+
+  // 2.3 Complexidade
+  const [complexity, setComplexity] = useState<"Baixa" | "Normal" | "Alta" | "Muito Alta">("Normal");
+
+  // 2.4 Porte do Cliente
+  const [clientSize, setClientSize] = useState<"Pessoa Física" | "MEI" | "Microempresa" | "Pequena Empresa" | "Média Empresa" | "Grande Empresa" | "Indústria">("Pequena Empresa");
+
+  // 2.5 Equipe Técnica
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
+    { id: "tm-1", role: "Engenheiro Responsável", hourlyRate: 95.00, hours: 16 },
+    { id: "tm-2", role: "Técnico", hourlyRate: 35.00, hours: 12 },
+    { id: "tm-3", role: "Auxiliar", hourlyRate: 22.00, hours: 8 },
+    { id: "tm-4", role: "Estagiário", hourlyRate: 15.00, hours: 0 },
+  ]);
+
+  // 2.6 Distribuição das Horas (Atividades)
+  const [activities, setActivities] = useState<ActivityHour[]>([
+    { id: "act-1", name: "Planejamento", category: "escritorio", hours: 2, hourlyRate: 95 },
+    { id: "act-2", name: "Deslocamento", category: "campo", hours: 3, hourlyRate: 35 },
+    { id: "act-3", name: "Inspeção Técnica", category: "campo", hours: 8, hourlyRate: 95 },
+    { id: "act-4", name: "Levantamentos", category: "campo", hours: 4, hourlyRate: 35 },
+    { id: "act-5", name: "Coleta de Dados", category: "campo", hours: 2, hourlyRate: 35 },
+    { id: "act-6", name: "Registro Fotográfico", category: "campo", hours: 2, hourlyRate: 35 },
+    { id: "act-7", name: "Análises Técnicas", category: "escritorio", hours: 6, hourlyRate: 95 },
+    { id: "act-8", name: "Elaboração do Laudo", category: "escritorio", hours: 8, hourlyRate: 95 },
+    { id: "act-9", name: "Revisão", category: "escritorio", hours: 2, hourlyRate: 95 },
+    { id: "act-10", name: "Emissão de ART", category: "escritorio", hours: 1, hourlyRate: 95 },
+    { id: "act-11", name: "Atendimento ao Cliente", category: "administrativo", hours: 2, hourlyRate: 50 },
+    { id: "act-12", name: "Administrativo", category: "administrativo", hours: 2, hourlyRate: 35 },
+  ]);
+
+  // 2.7 Despesas Operacionais
+  const [operationalExpenses, setOperationalExpenses] = useState<OperationalExpense[]>([
+    { id: "op-1", name: "Combustível", qty: 50, unitValue: 1.50 },
+    { id: "op-2", name: "Pedágio", qty: 2, unitValue: 15.00 },
+    { id: "op-3", name: "Hospedagem", qty: 0, unitValue: 250.00 },
+    { id: "op-4", name: "Alimentação", qty: 2, unitValue: 60.00 },
+    { id: "op-5", name: "Passagens", qty: 0, unitValue: 0.00 },
+    { id: "op-6", name: "Estacionamento", qty: 1, unitValue: 25.00 },
+    { id: "op-7", name: "Frete", qty: 0, unitValue: 0.00 },
+    { id: "op-8", name: "Locação de Equipamentos", qty: 0, unitValue: 0.00 },
+    { id: "op-9", name: "Equipamentos de Medição", qty: 1, unitValue: 100.00 },
+    { id: "op-10", name: "Diárias", qty: 2, unitValue: 150.00 },
+    { id: "op-11", name: "Outros", qty: 0, unitValue: 0.00 },
+  ]);
+
+  // 2.8 Despesas Administrativas
+  const [adminExpenses, setAdminExpenses] = useState<AdminExpense[]>([
+    { id: "adm-1", name: "ART CREA-PE", value: 108.39 },
+    { id: "adm-2", name: "Seguro", value: 50.00 },
+    { id: "adm-3", name: "Impressões / Plotagens", value: 30.00 },
+    { id: "adm-4", name: "Correios / Envio", value: 0.00 },
+    { id: "adm-5", name: "Taxas e Licenças", value: 0.00 },
+    { id: "adm-6", name: "Software / Certificado", value: 45.00 },
+    { id: "adm-7", name: "Despesas Bancárias", value: 15.00 },
+    { id: "adm-8", name: "Outros", value: 0.00 },
+  ]);
+
+  // ETAPA 3 - Controles e Margem
+  const [autoMargin, setAutoMargin] = useState<boolean>(true);
+  const [customMarginPercent, setCustomMarginPercent] = useState<number>(30);
+
+  const [multiplierQty, setMultiplierQty] = useState<number>(1);
+  const [technicalHours, setTechnicalHours] = useState<number>(16);
+  const [docHours, setDocHours] = useState<number>(8);
+  const [hourlyRate, setHourlyRate] = useState<number>(220);
+  const [travelKm, setTravelKm] = useState<number>(50);
+  const [lodgingDays, setLodgingDays] = useState<number>(0);
+  const [artCost, setArtCost] = useState<number>(108.39);
+  const [extraExpenses, setExtraExpenses] = useState<number>(0);
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [taxPercent, setTaxPercent] = useState<number>(16.5);
+  const [profitMargin, setProfitMargin] = useState<number>(30);
+  const [minPrice, setMinPrice] = useState<number>(1500);
+  const [paymentTerms, setPaymentTerms] = useState("50% no aceite eletrônico e 50% após emissão da ART/Laudo.");
+  const [validityDays, setValidityDays] = useState(15);
+  const [executionWeeks, setExecutionWeeks] = useState(2);
+
+  // New customizable fields for NF options and Escopo Técnico
+  const [hasNf, setHasNf] = useState<boolean>(true);
+  const [escopoItems, setEscopoItems] = useState<{ item: string; atividade: string; descricao: string }[]>(() => [
+    { item: "01", atividade: "Inspeção In Loco", descricao: "Vistoria presencial minuciosa do maquinário ou instalação para mapeamento visual de não-conformidades de segurança." },
+    { item: "02", atividade: "Checklists Normativos", descricao: "Aplicação de checklists técnicos customizados baseados nas resoluções ABNT e normas federais de referência." },
+    { item: "03", atividade: "Ensaios Físicos", descricao: "Realização de ensaios estruturais não destrutivos avançados (PM, ultrassom ou estanqueidade) conforme exigido pela categoria do equipamento." },
+    { item: "04", atividade: "Emissão de Relatório", descricao: "Elaboração de laudo fotográfico conclusivo apontando falhas e plano de ação corretivo detalhado para readequação física." },
+    { item: "05", atividade: "ART CREA-PE", descricao: "Anotação de Responsabilidade Técnica emitida eletronicamente junto ao conselho federal de engenharia, conferindo validade legal." },
+  ]);
+
+  // ETAPA 4 - Geração Automática / AI State
+  const [aiObjective, setAiObjective] = useState("");
+  const [aiScope, setAiScope] = useState<string[]>([]);
+  const [aiNorms, setAiNorms] = useState<string[]>([]);
+  const [aiObservations, setAiObservations] = useState<string[]>([]);
+  const [aiExclusions, setAiExclusions] = useState<string[]>([]);
+  const [aiComplementary, setAiComplementary] = useState<string[]>([]);
+  const [generatingAI, setGeneratingAI] = useState(false);
+  const [savingProposal, setSavingProposal] = useState(false);
+  const [deletingProposalId, setDeletingProposalId] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState("");
+
+  // NOVOS CAMPOS: Descrição da demanda e Imagens ilustrativas
+  const [demandDescription, setDemandDescription] = useState("Laudo de integridade física para caminhão munck");
+  const [proposalImages, setProposalImages] = useState<string[]>([]);
+  const [deliveryDays, setDeliveryDays] = useState<number>(14);
+  const [visibleSections, setVisibleSections] = useState({
+    capa: true,
+    contracapa: true,
+    principios: true,
+    entregamos: true,
+    problemas: true,
+    clientes: true,
+    resumoServicos: true,
+    identificacao: true,
+    equipe: true,
+    atividades: true,
+    investimento: true,
+    condicoes: true,
+    prazos: true,
+    assinatura: true,
+  });
+
+  // Automatically update demandDescription to equal the selected services names
+  useEffect(() => {
+    if (selectedServices.length > 0) {
+      const names = selectedServices.map(s => s.name).join(" e ");
+      setDemandDescription(names);
+    } else {
+      setDemandDescription("Laudo de integridade física para caminhão munck");
+    }
+  }, [selectedServices]);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArray = Array.from(e.target.files) as File[];
+      filesArray.forEach((file: File) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result) {
+            setProposalImages(prev => [...prev, reader.result as string]);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const removeProposalImage = (index: number) => {
+    setProposalImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Print references
+  const printProposalRef = useRef<HTMLDivElement | null>(null);
+
+  // Load history on mount with real-time Firestore synchronization
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+
+    const loadHistory = async () => {
+      let localProposals: Proposal[] = [];
+      const saved = localStorage.getItem("vitor_engmec_pricing_proposals");
+      if (saved) {
+        try {
+          localProposals = JSON.parse(saved);
+        } catch (err) {
+          console.error("Failed to parse history", err);
+        }
+      }
+
+      if (isRealFirebase) {
+        try {
+          unsubscribe = onSnapshot(collection(db, "proposals"), (snapshot) => {
+            const firestoreProposals: Proposal[] = [];
+            snapshot.forEach(doc => {
+              const data = doc.data() as Proposal;
+              if (data && data.id) {
+                firestoreProposals.push(data);
+              }
+            });
+
+            const mergedMap = new Map<string, Proposal>();
+            localProposals.forEach(p => { if (p && p.id) mergedMap.set(p.id, p); });
+            firestoreProposals.forEach(p => { if (p && p.id) mergedMap.set(p.id, p); });
+
+            const merged = Array.from(mergedMap.values()).sort((a, b) => (b.id || "").localeCompare(a.id || ""));
+            setHistoryList(merged);
+            localStorage.setItem("vitor_engmec_pricing_proposals", JSON.stringify(merged));
+          }, (err) => {
+            console.error("Firestore proposals snapshot error:", err);
+            if (localProposals.length > 0) setHistoryList(localProposals);
+          });
+          return;
+        } catch (err) {
+          console.error("Failed to setup snapshot listener for proposals:", err);
+        }
+      }
+
+      if (localProposals.length > 0) {
+        setHistoryList(localProposals);
+      } else {
+        // Seed with some professional proposals
+        const seed: Proposal[] = [
+          {
+            id: "PROP-2026-001",
+            clientCompany: "Indústria Metalúrgica Guararapes S.A.",
+            clientName: "Roberto Antunes",
+            clientCnpj: "45.123.456/0001-99",
+            clientCity: "Jaboatão dos Guararapes",
+            clientState: "PE",
+            clientContact: "(81) 3461-1299",
+            clientEmail: "compras@metalurgicaguararapes.com",
+            clientRole: "Gerente Industrial",
+            services: [
+              {
+                id: "serv-nr12",
+                name: "Laudo de Adequação NR-12",
+                description: "Mapeamento detalhado de perigos mecânicos de 3 injetoras plásticas.",
+                basePrice: 4500,
+                norms: ["NR-12", "NBR ISO 12100"],
+                scope: ["Vistoria técnica", "Análise de segurança estrutural", "ART"]
+              }
+            ],
+            pricingInfo: {
+              subtotal: 4500,
+              descontos: 500,
+              impostos: 660,
+              totalGeral: 4000,
+              estimatedHours: 24,
+              estimatedTeamSize: 2,
+              paymentTerms: "Faturado em 15 dias após aprovação.",
+              validityDays: 15,
+              executionWeeks: 2
+            },
+            status: "aprovado",
+            signature: "Digital Signed",
+            signedAt: new Date().toISOString(),
+            signedByName: "Roberto Antunes",
+            signedByRole: "Gerente Industrial"
+          }
+        ];
+        localStorage.setItem("vitor_engmec_pricing_proposals", JSON.stringify(seed));
+        setHistoryList(seed);
+      }
+    };
+
+    loadHistory();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  const triggerToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(""), 4000);
+  };
+
+  // Service toggle handler
+  const toggleService = (template: ServiceTemplate) => {
+    const exists = selectedServices.some(s => s.id === template.id);
+    if (exists) {
+      setSelectedServices(selectedServices.filter(s => s.id !== template.id));
+    } else {
+      setSelectedServices([...selectedServices, template]);
+      // Accumulate hours and team properties
+      setTechnicalHours(prev => prev + template.hours);
+    }
+  };
+
+  // Calculation Engine (Reproduz exatamente a lógica financeira da planilha mestre - Etapa 3)
+  const calculateFinancials = () => {
+    // 3.1 Custo de Mão de Obra = Σ (Horas × Valor HH)
+    const activityLaborCost = activities.reduce((sum, act) => sum + (act.hours * act.hourlyRate), 0);
+    const teamLaborCost = teamMembers.reduce((sum, tm) => sum + (tm.hours * tm.hourlyRate), 0);
+    const totalLaborCost = activityLaborCost > 0 ? activityLaborCost : teamLaborCost;
+
+    const totalHH = activities.reduce((sum, act) => sum + act.hours, 0);
+    const fieldHours = activities.filter(a => a.category === "campo").reduce((s, a) => s + a.hours, 0);
+    const officeHours = activities.filter(a => a.category === "escritorio").reduce((s, a) => s + a.hours, 0);
+    const adminHours = activities.filter(a => a.category === "administrativo").reduce((s, a) => s + a.hours, 0);
+
+    // 3.2 Custos Operacionais
+    const operationalCostTotal = operationalExpenses.reduce((sum, exp) => sum + (exp.qty * exp.unitValue), 0);
+
+    // 3.3 Custos Administrativos
+    const adminCostTotal = adminExpenses.reduce((sum, exp) => sum + exp.value, 0);
+
+    // 3.4 Custo Total do Serviço = Mão de Obra + Custos Operacionais + Custos Administrativos
+    const totalCost = totalLaborCost + operationalCostTotal + adminCostTotal;
+
+    // 3.5 Margem Comercial
+    const porteMargin = PORTE_MARGINS[clientSize] || 18;
+    const complexityMargin = COMPLEXITY_MARGINS[complexity]?.margin || 15;
+    const recommendedMargin = porteMargin + complexityMargin;
+
+    // 3.6 Aplicação da Margem (Sim = Automática / Não = Manual)
+    const appliedMarginPct = autoMargin ? recommendedMargin : customMarginPercent;
+
+    // 3.7 Preço Final
+    const marginValue = totalCost * (appliedMarginPct / 100);
+    const preTaxPrice = totalCost + marginValue;
+
+    // Impostos (NFS-e)
+    const taxFactor = hasNf && taxPercent > 0 ? taxPercent / 100 : 0;
+    const totalWithTaxCalculated = taxFactor > 0 && taxFactor < 1 ? preTaxPrice / (1 - taxFactor) : preTaxPrice;
+    const impostos = totalWithTaxCalculated - preTaxPrice;
+
+    // Preço Final após Desconto e Mínimo
+    const finalCalculated = Math.max(totalWithTaxCalculated, minPrice);
+    const discountVal = (finalCalculated * discountPercent) / 100;
+    const totalGeral = Math.max(0, finalCalculated - discountVal);
+
+    // 3.8 Comparação com Mercado
+    const totalServicesCount = selectedServices.length || 1;
+    const basePriceSum = selectedServices.reduce((sum, s) => sum + (s.basePrice || 2500), 0) * (multiplierQty || 1);
+    const marketAverageValue = basePriceSum > 0 ? basePriceSum : 3500;
+
+    const marketDiffVal = totalGeral - marketAverageValue;
+    const marketDiffPct = marketAverageValue > 0 ? ((totalGeral - marketAverageValue) / marketAverageValue) * 100 : 0;
+
+    let marketClassification = "Dentro do Mercado";
+    let marketBadge = "🟡 Dentro do Mercado";
+    if (totalGeral < marketAverageValue * 0.92) {
+      marketClassification = "Abaixo do Mercado";
+      marketBadge = "🟢 Abaixo do Mercado";
+    } else if (totalGeral > marketAverageValue * 1.08) {
+      marketClassification = "Acima do Mercado";
+      marketBadge = "🔴 Acima do Mercado";
+    }
+
+    // 3.9 Indicadores Financeiros
+    const profitBruto = totalGeral - impostos - totalCost;
+    const profitMarginPct = totalGeral > 0 ? (profitBruto / totalGeral) * 100 : 0;
+    const costPerHH = totalHH > 0 ? totalCost / totalHH : 0;
+    const revenuePerHH = totalHH > 0 ? totalGeral / totalHH : 0;
+
+    const totalQty = totalServicesCount * (multiplierQty || 1);
+
+    return {
+      totalHH,
+      fieldHours,
+      officeHours,
+      adminHours,
+      totalLaborCost,
+      operationalCostTotal,
+      adminCostTotal,
+      totalCost,
+      porteMargin,
+      complexityMargin,
+      recommendedMargin,
+      appliedMarginPct,
+      marginValue,
+      preTaxPrice,
+      impostos,
+      discountVal,
+      totalGeral,
+      marketAverageValue,
+      marketDiffVal,
+      marketDiffPct,
+      marketClassification,
+      marketBadge,
+      profitBruto,
+      profitMarginPct,
+      costPerHH,
+      revenuePerHH,
+      // Legacy backwards-compatibility properties
+      laborCost: totalLaborCost,
+      docLaborCost: officeHours * (hourlyRate || 95),
+      travelCost: distanceKm * 1.5,
+      lodgingCost: lodgingDays * 250,
+      directCostsSum: totalCost,
+      profitValue: marginValue,
+      subtotal: totalGeral,
+      descontos: discountVal,
+      valuePerEquipment: totalQty > 0 ? totalGeral / totalQty : totalGeral
+    };
+  };
+
+  const financials = calculateFinancials();
+
+  // Dynamic Page numbering helpers based on checked sections
+  const getPageNum = (sectionKey: keyof typeof visibleSections) => {
+    const keys: (keyof typeof visibleSections)[] = [
+      "capa", "contracapa", "principios", "entregamos", "problemas", "clientes",
+      "resumoServicos", "identificacao", "equipe", "atividades", "investimento",
+      "condicoes", "prazos", "assinatura"
+    ];
+    const activeKeys = keys.filter(k => visibleSections[k]);
+    const idx = activeKeys.indexOf(sectionKey);
+    return idx !== -1 ? `${(idx + 1).toString().padStart(2, '0')}` : '';
+  };
+
+  const getTotalPagesLabel = () => {
+    return Object.values(visibleSections).filter(Boolean).length;
+  };
+
+  // Trigger Gemini AI generation for the proposal texts
+  const runAIGeneration = async () => {
+    if (selectedServices.length === 0) {
+      alert("Por favor, selecione pelo menos um serviço na Etapa 2.");
+      return;
+    }
+    setGeneratingAI(true);
+    try {
+      const response = await fetch("/api/gemini/proposal-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          services: selectedServices.map(s => ({
+            name: s.name,
+            description: s.description,
+            basePrice: s.basePrice
+          })),
+          clientInfo: {
+            clientCompany,
+            clientName,
+            clientCnpj,
+            clientCity,
+            clientState,
+            clientRole
+          },
+          pricingInfo: {
+            totalGeral: financials.totalGeral,
+            estimatedHours: technicalHours
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error("API call returned non-200");
+      const data = await response.json();
+      
+      setAiObjective(data.objetivo);
+      setAiScope(data.escopo);
+      setAiNorms(data.normas);
+      setAiObservations(data.observacoes);
+      setAiExclusions(data.itensNaoInclusos);
+      setAiComplementary(data.servicosComplementares);
+      
+      triggerToast("Proposta otimizada e reescrita com inteligência artificial!");
+    } catch (err) {
+      console.error("AI Generation error, loading standard templates", err);
+      // Fallback templates
+      const fallbackObjective = `Esta proposta formaliza o compromisso da VL Engenharia em prestar consultoria pericial qualificada para a empresa ${clientCompany || "Cliente Geral LTDA"}, mediante vistorias técnicas criteriosas, compilação de checklists normativos e emissão de Laudos e Anotações de Responsabilidade Técnica (ART) junto ao CREA-PE.`;
+      const fallbackScopes = selectedServices.flatMap(s => s.scope);
+      const fallbackNorms = selectedServices.flatMap(s => s.norms);
+      
+      setAiObjective(fallbackObjective);
+      setAiScope(fallbackScopes);
+      setAiNorms(fallbackNorms);
+      setAiObservations([
+        "O cliente deverá disponibilizar manuais e documentos anteriores das máquinas.",
+        "A vistoria presencial deverá ser agendada com no mínimo 3 dias úteis de antecedência."
+      ]);
+      setAiExclusions([
+        "Instalação mecânica física, reparos ou serralheria de campo.",
+        "Projetos elétricos ou automação de segurança adicionais."
+      ]);
+      setAiComplementary([
+        "Auditoria de conformidade e suporte pós-reforma industrial",
+        "Inspeções preventivas anuais programadas"
+      ]);
+      triggerToast("Proposta gerada usando modelos estruturados da VL Engenharia.");
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
+
+  // Auto-generate sections when reaching Etapa 4
+  useEffect(() => {
+    if (currentStep === 4 && !aiObjective) {
+      runAIGeneration();
+    }
+  }, [currentStep]);
+
+  // Helper to resolve the correct shared app URL regardless of the sandbox domain pattern
+  const getSharedUrl = (id?: string) => {
+    let origin = window.location.origin;
+    if (origin.includes("ais-dev-")) {
+      origin = origin.replace("ais-dev-", "ais-pre-");
+    } else if (origin.includes("looping-sandbox-dev")) {
+      origin = origin.replace("looping-sandbox-dev", "looping-sandbox");
+    } else if (origin.includes("-dev.")) {
+      origin = origin.replace("-dev.", ".");
+    } else if (origin.includes("-dev")) {
+      origin = origin.replace("-dev", "-pre");
+    }
+    const path = window.location.pathname;
+    return id ? `${origin}${path}?proposalId=${id}` : `${origin}${path}`;
+  };
+
+  const clearForm = () => {
+    setEditingProposalId(null);
+    setSelectedAssociatedLaudoId("");
+    setSelectedAssociatedLaudoTitle("");
+    setClientCompany("");
+    setClientCnpj("");
+    setClientName("");
+    setClientRole("");
+    setClientAddress("");
+    setClientCity("Recife");
+    setClientState("PE");
+    setClientContact("");
+    setClientEmail("");
+    setSelectedServices([]);
+    setMultiplierQty(1);
+    setTechnicalHours(16);
+    setTravelKm(0);
+    setLodgingDays(0);
+    setArtCost(108.39);
+    setExtraExpenses(0);
+    setDiscountPercent(0);
+    setTaxPercent(16.5);
+    setProfitMargin(30);
+    setMinPrice(1500);
+    setPaymentTerms("50% no aceite eletrônico e 50% após emissão da ART/Laudo.");
+    setValidityDays(15);
+    setExecutionWeeks(2);
+    setHasNf(true);
+    setEscopoItems([
+      { item: "01", atividade: "Inspeção In Loco", descricao: "Vistoria presencial minuciosa do maquinário ou instalação para mapeamento visual de não-conformidades de segurança." },
+      { item: "02", atividade: "Checklists Normativos", descricao: "Aplicação de checklists técnicos customizados baseados nas resoluções ABNT e normas federais de referência." },
+      { item: "03", atividade: "Ensaios Físicos", descricao: "Realização de ensaios estruturais não destrutivos avançados (PM, ultrassom ou estanqueidade) conforme exigido pela categoria do equipamento." },
+      { item: "04", atividade: "Emissão de Relatório", descricao: "Elaboração de laudo fotográfico conclusivo apontando falhas e plano de ação corretivo detalhado para readequação física." },
+      { item: "05", atividade: "ART CREA-PE", descricao: "Anotação de Responsabilidade Técnica emitida eletronicamente junto ao conselho federal de engenharia, conferindo validade legal." },
+    ]);
+    setAiObjective("");
+    setAiScope([]);
+    setAiNorms([]);
+    setAiObservations([]);
+    setAiExclusions([]);
+    setAiComplementary([]);
+    setDemandDescription("Laudo de integridade física para caminhão munck");
+    setProposalImages([]);
+    setDeliveryDays(14);
+    setVisibleSections({
+      capa: true,
+      contracapa: true,
+      principios: true,
+      entregamos: true,
+      problemas: true,
+      clientes: true,
+      resumoServicos: true,
+      identificacao: true,
+      equipe: true,
+      atividades: true,
+      investimento: true,
+      condicoes: true,
+      prazos: true,
+      assinatura: true,
+    });
+    setCurrentStep(1);
+    triggerToast("Formulário limpo para um novo orçamento.");
+  };
+
+  const handleEditProposal = (prop: Proposal) => {
+    setEditingProposalId(prop.id);
+    setSelectedAssociatedLaudoId(prop.associatedLaudoId || "");
+    setSelectedAssociatedLaudoTitle(prop.associatedLaudoTitle || "");
+    
+    // ETAPA 1
+    setClientCompany(prop.clientCompany || "");
+    setClientCnpj(prop.clientCnpj || "");
+    setClientName(prop.clientName || "");
+    setClientRole(prop.clientRole || "");
+    setClientAddress(prop.clientAddress || "");
+    setClientCity(prop.clientCity || "Recife");
+    setClientState(prop.clientState || "PE");
+    setClientContact(prop.clientContact || "");
+    setClientEmail(prop.clientEmail || "");
+
+    // ETAPA 2
+    setSelectedServices(prop.services.map(s => {
+      const match = PRE_REGISTERED_SERVICES.find(ts => ts.id === s.id);
+      return {
+        id: s.id,
+        name: s.name,
+        category: match?.category || "Industrial",
+        basePrice: s.basePrice,
+        norms: s.norms || [],
+        scope: s.scope || [],
+        durationDays: s.durationDays || match?.durationDays || 3,
+        hours: match?.hours || 16,
+        professionals: match?.professionals || 1,
+        description: s.description || ""
+      };
+    }));
+
+    // ETAPA 3
+    setMultiplierQty(prop.pricingInfo.multiplierQty ?? 1);
+    setTechnicalHours(prop.pricingInfo.technicalHours ?? prop.pricingInfo.estimatedHours ?? 16);
+    setDocHours(prop.pricingInfo.docHours ?? 8);
+    setHourlyRate(prop.pricingInfo.hourlyRate ?? 220);
+    setTravelKm(prop.pricingInfo.travelKm ?? 0);
+    setLodgingDays(prop.pricingInfo.lodgingDays ?? 0);
+    setArtCost(prop.pricingInfo.artCost ?? 108.39);
+    setExtraExpenses(prop.pricingInfo.extraExpenses ?? 0);
+    setDiscountPercent(prop.pricingInfo.discountPercent ?? 0);
+    setTaxPercent(prop.pricingInfo.taxPercent ?? 16.5);
+    setProfitMargin(prop.pricingInfo.profitMargin ?? 30);
+    setMinPrice(prop.pricingInfo.minPrice ?? 1500);
+    setPaymentTerms(prop.pricingInfo.paymentTerms || "50% no aceite eletrônico e 50% após emissão da ART/Laudo.");
+    setValidityDays(prop.pricingInfo.validityDays ?? 15);
+    setExecutionWeeks(prop.pricingInfo.executionWeeks ?? 2);
+    setHasNf(prop.hasNf ?? true);
+    setEscopoItems(prop.escopoItems ?? [
+      { item: "01", atividade: "Inspeção In Loco", descricao: "Vistoria presencial minuciosa do maquinário ou instalação para mapeamento visual de não-conformidades de segurança." },
+      { item: "02", atividade: "Checklists Normativos", descricao: "Aplicação de checklists técnicos customizados baseados nas resoluções ABNT e normas federais de referência." },
+      { item: "03", atividade: "Ensaios Físicos", descricao: "Realização de ensaios estruturais não destrutivos avançados (PM, ultrassom ou estanqueidade) conforme exigido pela categoria do equipamento." },
+      { item: "04", atividade: "Emissão de Relatório", descricao: "Elaboração de laudo fotográfico conclusivo apontando falhas e plano de ação corretivo detalhado para readequação física." },
+      { item: "05", atividade: "ART CREA-PE", descricao: "Anotação de Responsabilidade Técnica emitida eletronicamente junto ao conselho federal de engenharia, conferindo validade legal." },
+    ]);
+
+    // ETAPA 4 / AI
+    setAiObjective(prop.aiObjective || "");
+    setAiScope(prop.aiScope || []);
+    setAiNorms(prop.aiNorms || []);
+    setAiObservations(prop.aiObservations || []);
+    setAiExclusions(prop.aiExclusions || []);
+    setAiComplementary(prop.aiComplementary || []);
+    setDemandDescription(prop.demandDescription || "");
+    setProposalImages(prop.images || []);
+    setDeliveryDays(prop.deliveryDays ?? 14);
+    
+    if (prop.visibleSections) {
+      setVisibleSections({
+        capa: prop.visibleSections.capa ?? true,
+        contracapa: prop.visibleSections.contracapa ?? true,
+        principios: prop.visibleSections.principios ?? true,
+        entregamos: prop.visibleSections.entregamos ?? true,
+        problemas: prop.visibleSections.problemas ?? true,
+        clientes: prop.visibleSections.clientes ?? true,
+        resumoServicos: prop.visibleSections.resumoServicos ?? true,
+        identificacao: prop.visibleSections.identificacao ?? true,
+        equipe: prop.visibleSections.equipe ?? true,
+        atividades: prop.visibleSections.atividades ?? true,
+        investimento: prop.visibleSections.investimento ?? true,
+        condicoes: prop.visibleSections.condicoes ?? true,
+        prazos: prop.visibleSections.prazos ?? true,
+        assinatura: prop.visibleSections.assinatura ?? true,
+      });
+    }
+
+    // Switch tab and go to first step or step 4
+    setActiveTab("new");
+    setCurrentStep(1); // load the active editor
+    triggerToast(`Orçamento ${prop.id} carregado para edição! Faça seus ajustes e salve.`);
+  };
+
+  // Save draft / publish proposal in localStorage
+  const handleSaveProposal = async (status: "rascunho" | "enviado") => {
+    setSavingProposal(true);
+    try {
+      const isEditing = !!editingProposalId;
+      const proposalId = editingProposalId || `PROP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+      
+      const newProposal: Proposal = {
+        id: proposalId,
+        clientCompany: clientCompany || "Empresa Cliente Geral",
+        clientName: clientName || "Contato de Vendas",
+        clientCnpj: clientCnpj || "00.000.000/0001-00",
+        clientCity: clientCity,
+        clientState: clientState,
+        clientContact: clientContact,
+        clientEmail: clientEmail,
+        clientRole: clientRole,
+        clientAddress: clientAddress,
+        services: selectedServices.map(s => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          basePrice: s.basePrice,
+          norms: s.norms,
+          scope: s.scope,
+          durationDays: s.durationDays
+        })),
+        pricingInfo: {
+          subtotal: financials.subtotal,
+          descontos: financials.descontos,
+          impostos: financials.impostos,
+          totalGeral: financials.totalGeral,
+          estimatedHours: technicalHours,
+          hourlyRate: hourlyRate,
+          estimatedTeamSize: selectedServices.reduce((acc, s) => Math.max(acc, s.professionals), 1),
+          paymentTerms: paymentTerms,
+          validityDays: validityDays,
+          executionWeeks: executionWeeks,
+          multiplierQty: multiplierQty,
+          technicalHours: technicalHours,
+          docHours: docHours,
+          travelKm: travelKm,
+          lodgingDays: lodgingDays,
+          artCost: artCost,
+          extraExpenses: extraExpenses,
+          discountPercent: discountPercent,
+          taxPercent: taxPercent,
+          profitMargin: profitMargin,
+          minPrice: minPrice
+        },
+        aiObjective,
+        aiScope,
+        aiNorms,
+        aiObservations,
+        aiExclusions,
+        aiComplementary,
+        status: status,
+        images: proposalImages,
+        demandDescription: demandDescription,
+        deliveryDays: deliveryDays,
+        visibleSections: visibleSections,
+        hasNf: hasNf,
+        escopoItems: escopoItems,
+        associatedLaudoId: selectedAssociatedLaudoId || undefined,
+        associatedLaudoTitle: selectedAssociatedLaudoTitle || undefined
+      };
+
+      if (isRealFirebase || hasRealConfig) {
+        try {
+          await setDoc(doc(db, "proposals", proposalId), newProposal);
+          console.log("Saved proposal to Firestore successfully:", proposalId);
+        } catch (dbErr) {
+          console.error("Failed to save proposal to Firestore:", dbErr);
+        }
+      }
+
+      let updatedHistory;
+      if (isEditing) {
+        updatedHistory = historyList.map(p => p.id === editingProposalId ? newProposal : p);
+      } else {
+        updatedHistory = [newProposal, ...historyList];
+      }
+      
+      setHistoryList(updatedHistory);
+      localStorage.setItem("vitor_engmec_pricing_proposals", JSON.stringify(updatedHistory));
+      setSavingProposal(false);
+      setEditingProposalId(null);
+      
+      if (status === "enviado") {
+        const secureUrl = getSharedUrl(proposalId);
+        const message = `Olá, ${clientName}! Segue o link seguro para visualizar, aprovar e assinar eletronicamente a nossa Proposta Comercial da VL Engenharia:\n\n${secureUrl}`;
+        
+        // Show success toast immediately so the user always has confirmation
+        triggerToast("Orçamento publicado com sucesso no acervo!");
+
+        // Attempt copying to clipboard safely without blocking the rest of the flow
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          navigator.clipboard.writeText(secureUrl)
+            .then(() => {
+              triggerToast("Link seguro de assinatura copiado para área de transferência!");
+            })
+            .catch((err) => {
+              console.warn("Clipboard block", err);
+            });
+        }
+
+        // Attempt opening WhatsApp safely (direct call inside user thread increases popup permissions)
+        try {
+          const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+          window.open(waUrl, "_blank");
+        } catch (openErr) {
+          console.warn("Could not open WhatsApp window (blocked by iframe sandbox):", openErr);
+        }
+      } else {
+        triggerToast("Rascunho de orçamento salvo com sucesso no acervo!");
+      }
+    } catch (err) {
+      console.error("Save error", err);
+      setSavingProposal(false);
+    }
+  };
+
+  const deleteProposal = (id: string) => {
+    try {
+      const filtered = historyList.filter(p => p.id !== id);
+      setHistoryList(filtered);
+      localStorage.setItem("vitor_engmec_pricing_proposals", JSON.stringify(filtered));
+      setDeletingProposalId(null);
+      triggerToast("Orçamento removido com sucesso.");
+    } catch (err) {
+      console.error("Delete error", err);
+    }
+  };
+
+  const handleCopySecureLink = (id: string) => {
+    const secureUrl = getSharedUrl(id);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(secureUrl)
+        .then(() => {
+          triggerToast("Link seguro do cliente copiado!");
+        })
+        .catch((err) => {
+          console.warn("Clipboard failed", err);
+          triggerToast(`Link do cliente: ${secureUrl}`);
+        });
+    } else {
+      triggerToast(`Link do cliente: ${secureUrl}`);
+    }
+  };
+
+  // Modern PDF rendering with html2pdf and dynamic CDN script loading fallback
+  const exportA4PDF = async () => {
+    const element = document.getElementById("proposal-printable-block");
+    if (!element) return;
+
+    // Add special class to body to alter layout during PDF generation
+    document.body.classList.add("generating-pdf");
+
+    const opt = {
+      margin: 0,
+      filename: `Proposta_Comercial_VL_Engenharia_${clientCompany.replace(/[^a-zA-Z0-9]/g, "_") || "Geral"}.pdf`,
+      image: { type: "jpeg" as const, quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" as const },
+      pagebreak: { mode: ["css", "legacy"] }
+    };
+
+    try {
+      // Replace modern unsupported OKLCH colors in styles with standard rgb values temporarily
+      await preprocessStylesheets(element);
+
+      let exporter = (window as any).html2pdf;
+      if (!exporter) {
+        exporter = typeof html2pdf !== "undefined" ? ((html2pdf as any)?.default || html2pdf) : null;
+      }
+      
+      if (!exporter) {
+        // Dynamically load the bundled html2pdf.js from CDN to guarantee resolution
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+          script.onload = () => {
+            exporter = (window as any).html2pdf;
+            resolve();
+          };
+          script.onerror = () => reject(new Error("Não foi possível carregar a biblioteca de geração de PDF."));
+          document.body.appendChild(script);
+        });
+      }
+      
+      if (exporter) {
+        await exporter().from(element).set(opt).save();
+      } else {
+        throw new Error("A biblioteca html2pdf não pôde ser iniciada.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao gerar PDF:", err);
+      alert(`Houve um erro ao gerar o PDF: ${err?.message || err}. Por favor, tente novamente.`);
+    } finally {
+      // Remove special class from body and restore original stylesheets
+      document.body.classList.remove("generating-pdf");
+      restoreStylesheets();
+    }
+  };
+
+  const filteredHistory = historyList.filter(p => 
+    p.clientCompany.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="bg-slate-950 min-h-screen text-slate-100 p-4 sm:p-6 rounded-3xl border border-slate-800 shadow-2xl space-y-6">
+      
+      {/* HEADER SECTION */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl">
+            <Calculator className="h-6 w-6 animate-pulse" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-white uppercase font-sans">Orçamentos Inteligentes</h1>
+            <p className="text-slate-400 text-xs font-mono">Transformação automática de precificação em propostas de engenharia comercial premium.</p>
+          </div>
+        </div>
+
+        {/* ADMIN NAV TAB TOGGLE */}
+        <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+          <button
+            onClick={() => setActiveTab("new")}
+            className={`px-4 py-2 rounded-lg text-xs font-bold font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === "new" ? "bg-[#134074] text-white shadow-md" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {editingProposalId ? `Editando (${editingProposalId})` : "Novo Orçamento"}
+          </button>
+          {editingProposalId && activeTab === "new" && (
+            <button
+              onClick={clearForm}
+              className="px-3 py-2 rounded-lg text-xs font-bold font-mono uppercase tracking-wider bg-red-950/40 text-red-400 border border-red-900/50 hover:bg-red-900/40 transition-all flex items-center gap-1.5 ml-1 cursor-pointer"
+              title="Cancelar Edição e Iniciar Novo"
+            >
+              <X className="h-3.5 w-3.5" />
+              Novo do Zero
+            </button>
+          )}
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`px-4 py-2 rounded-lg text-xs font-bold font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === "history" ? "bg-[#134074] text-white shadow-md" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <History className="h-3.5 w-3.5" />
+            Histórico ({historyList.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("market")}
+            className={`px-4 py-2 rounded-lg text-xs font-bold font-mono uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === "market" ? "bg-[#134074] text-white shadow-md" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Valores de Mercado
+          </button>
+        </div>
+      </div>
+
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 p-4 bg-emerald-500/90 text-white rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-mono animate-bounce border border-emerald-400">
+          <Check className="h-4.5 w-4.5 border-2 border-white rounded-full p-0.5" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
+      {/* VIEW: NEW BUDGET GENERATOR WITH STEPS */}
+      {activeTab === "new" && (
+        <div className="space-y-6">
+          
+          {/* STEP INDICATOR HEADER */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs font-mono">
+            {[
+              { step: 1, label: "Dados do Cliente" },
+              { step: 2, label: "Serviços & Parâmetros" },
+              { step: 3, label: "Cálculo & Margem" },
+              { step: 4, label: "Proposta Comercial" }
+            ].map((s) => (
+              <button
+                key={s.step}
+                onClick={() => {
+                  if (s.step < currentStep || selectedServices.length > 0) {
+                    setCurrentStep(s.step as any);
+                  }
+                }}
+                className={`p-3 rounded-xl border transition-all text-left flex items-center gap-2.5 ${
+                  currentStep === s.step
+                    ? "bg-[#0B2545] border-[#4895EF] text-white shadow-lg"
+                    : currentStep > s.step
+                    ? "bg-slate-900/60 border-slate-800 text-slate-300"
+                    : "bg-slate-950 border-slate-900/40 text-slate-500 cursor-not-allowed"
+                }`}
+              >
+                <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                  currentStep === s.step 
+                    ? "bg-[#4895EF] text-[#0B2545]" 
+                    : currentStep > s.step 
+                    ? "bg-emerald-500/20 text-emerald-400" 
+                    : "bg-slate-900 text-slate-600"
+                }`}>
+                  {currentStep > s.step ? <Check className="h-3 w-3" /> : s.step}
+                </span>
+                <div>
+                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Etapa {s.step}</p>
+                  <p className="font-sans font-bold text-[11px] truncate">{s.label}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* STEP 1: CLIENT DATA */}
+          {currentStep === 1 && (
+            <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-6">
+              <div className="border-b border-slate-800 pb-3 flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-[#4895EF]" />
+                <h3 className="text-white text-sm font-bold uppercase tracking-wider font-mono">Etapa 1 – Identificação Geral do Cliente</h3>
+              </div>
+
+              {/* Client Selection from pre-registered clients */}
+              <div className="p-4 bg-slate-950/40 rounded-2xl border border-slate-800/80 space-y-3">
+                <p className="text-slate-400 text-xs font-sans">
+                  Selecione um cliente pré-cadastrado abaixo para preencher automaticamente todos os dados comerciais e otimizar a precificação:
+                </p>
+                <ClientSelector
+                  clients={clients}
+                  label="Pesquisar no Cadastro de Clientes"
+                  onSelectClient={(client) => {
+                    if (client.id) {
+                      setClientCompany(client.company || client.name || "");
+                      setClientCnpj(client.cnpj_cpf || "");
+                      setClientName(client.name || "");
+                      setClientAddress(client.address || "");
+                      setClientContact(client.phone || "");
+                      setClientEmail(client.email || "");
+                      if (client.address) {
+                        const addrLower = client.address.toLowerCase();
+                        if (addrLower.includes("jaboatão")) {
+                          setClientCity("Jaboatão dos Guararapes");
+                          setClientState("PE");
+                        } else if (addrLower.includes("olinda")) {
+                          setClientCity("Olinda");
+                          setClientState("PE");
+                        } else if (addrLower.includes("caruaru")) {
+                          setClientCity("Caruaru");
+                          setClientState("PE");
+                        } else if (addrLower.includes("pe") || addrLower.includes("pernambuco")) {
+                          setClientCity("Recife");
+                          setClientState("PE");
+                        }
+                      }
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Associar a Laudo Salvo com IA */}
+              <div className="p-4 bg-teal-950/20 rounded-2xl border border-teal-500/30 space-y-3 text-left">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-teal-400" />
+                  <h4 className="text-xs font-mono font-bold text-teal-300 uppercase tracking-wider">
+                    Associar Orçamento a um Laudo com IA Salvo
+                  </h4>
+                </div>
+                <p className="text-slate-400 text-xs font-sans">
+                  Vincule esta proposta de precificação diretamente a um laudo técnico previamente elaborado no sistema para manter sincronismo completo:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                  <div className="sm:col-span-10">
+                    <select
+                      value={selectedAssociatedLaudoId}
+                      onChange={(e) => {
+                        const laudoId = e.target.value;
+                        if (!laudoId) {
+                          setSelectedAssociatedLaudoId("");
+                          setSelectedAssociatedLaudoTitle("");
+                          return;
+                        }
+                        const found = savedGeneratorLaudos.find(l => l.id === laudoId);
+                        if (found) {
+                          setSelectedAssociatedLaudoId(found.id);
+                          const title = `${found.type.toUpperCase()} - ${found.clientName || 'Cliente'} (${found.equipmentModel || found.numero || 'Nº ' + found.id.slice(-4)})`;
+                          setSelectedAssociatedLaudoTitle(title);
+                          
+                          // Auto-fill client if available
+                          if (found.clientName && !clientCompany) {
+                            setClientCompany(found.clientName);
+                          }
+                          if (found.formData) {
+                            if (found.formData.empresa && !clientCompany) setClientCompany(found.formData.empresa);
+                            if (found.formData.cnpj && !clientCnpj) setClientCnpj(found.formData.cnpj);
+                            if (found.formData.solicitante && !clientName) setClientName(found.formData.solicitante);
+                            if (found.formData.cidade && !clientCity) setClientCity(found.formData.cidade);
+                          }
+                          triggerToast(`Orçamento associado ao laudo: ${title}`);
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-slate-950 border border-teal-500/40 rounded-xl text-xs text-slate-100 font-sans focus:outline-none focus:ring-1 focus:ring-teal-400"
+                    >
+                      <option value="">-- Selecionar Laudo Salvo no Histórico --</option>
+                      {savedGeneratorLaudos.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          [{l.type.toUpperCase()}] {l.clientName || 'Cliente Sem Nome'} — {l.equipmentModel || l.numero || 'ID ' + l.id.slice(-6)} ({new Date(l.createdAt).toLocaleDateString('pt-BR')})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {selectedAssociatedLaudoId && (
+                    <div className="sm:col-span-2">
+                      <button
+                        onClick={() => {
+                          setSelectedAssociatedLaudoId("");
+                          setSelectedAssociatedLaudoTitle("");
+                        }}
+                        className="w-full py-2 px-3 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-xl text-[10px] font-mono uppercase font-bold cursor-pointer"
+                      >
+                        Desvincular
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {selectedAssociatedLaudoTitle && (
+                  <div className="p-2.5 bg-teal-500/10 border border-teal-500/30 rounded-xl text-xs text-teal-300 font-mono flex items-center justify-between">
+                    <span className="font-bold">✓ Vinculado a: {selectedAssociatedLaudoTitle}</span>
+                    <span className="text-[10px] text-teal-400 uppercase">ID: {selectedAssociatedLaudoId}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Razão Social / Nome da Empresa *</label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-3 h-4 w-4 text-slate-600" />
+                    <input 
+                      type="text" 
+                      value={clientCompany} 
+                      onChange={(e) => setClientCompany(e.target.value)}
+                      placeholder="Ex: Cerâmica Pernambuco S.A." 
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-10 py-2.5 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">CNPJ *</label>
+                  <input 
+                    type="text" 
+                    value={clientCnpj} 
+                    onChange={(e) => setClientCnpj(e.target.value)}
+                    placeholder="00.000.000/0001-00" 
+                    className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Representante Legal / Responsável *</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-slate-600" />
+                    <input 
+                      type="text" 
+                      value={clientName} 
+                      onChange={(e) => setClientName(e.target.value)}
+                      placeholder="Ex: Vitor Silva" 
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-10 py-2.5 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Cargo / Função</label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-3 top-3 h-4 w-4 text-slate-600" />
+                    <input 
+                      type="text" 
+                      value={clientRole} 
+                      onChange={(e) => setClientRole(e.target.value)}
+                      placeholder="Ex: Diretor de Operações" 
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-10 py-2.5 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 col-span-1 md:col-span-2">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Endereço Comercial</label>
+                  <input 
+                    type="text" 
+                    value={clientAddress} 
+                    onChange={(e) => setClientAddress(e.target.value)}
+                    placeholder="Rua, Número, Bairro" 
+                    className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Cidade / UF *</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-600" />
+                    <input 
+                      type="text" 
+                      value={clientCity} 
+                      onChange={(e) => setClientCity(e.target.value)}
+                      placeholder="Recife" 
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-10 py-2.5 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Telefone de Contato *</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-600" />
+                    <input 
+                      type="text" 
+                      value={clientContact} 
+                      onChange={(e) => setClientContact(e.target.value)}
+                      placeholder="(81) 98444-2592" 
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-10 py-2.5 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">E-mail Corporativo *</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-600" />
+                    <input 
+                      type="email" 
+                      value={clientEmail} 
+                      onChange={(e) => setClientEmail(e.target.value)}
+                      placeholder="gerencia@ceramicape.com.br" 
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-10 py-2.5 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* DESCRIÇÃO DA DEMANDA E IMAGENS */}
+              <div className="border-t border-slate-800/60 pt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Descrição da Demanda Solicitada *</label>
+                  <textarea 
+                    rows={3}
+                    value={demandDescription} 
+                    onChange={(e) => setDemandDescription(e.target.value)}
+                    placeholder="Ex: Laudo técnico de integridade estrutural e segurança de guindaste veicular, contemplando ensaios não destrutivos..." 
+                    className="w-full bg-slate-950 border border-slate-850 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#4895EF]"
+                  />
+                  <p className="text-[10px] text-slate-500 font-mono">Esta descrição será exibida em destaque nas páginas do orçamento impresso.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-slate-400 font-mono text-[10px] uppercase tracking-wider">Anexar Imagens do Levantamento (Max 4)</label>
+                  <div className="border-2 border-dashed border-slate-800 hover:border-slate-700 rounded-xl p-4 text-center cursor-pointer relative bg-slate-950">
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <FileText className="h-6 w-6 text-[#4895EF] mx-auto mb-2" />
+                    <p className="text-[11px] text-slate-300">Arraste ou clique para enviar fotos do local ou equipamento</p>
+                    <p className="text-[9px] text-slate-500">Formato PNG, JPG. Máximo 4 imagens.</p>
+                  </div>
+
+                  {proposalImages.length > 0 && (
+                    <div className="flex gap-2 flex-wrap mt-2">
+                      {proposalImages.map((img, idx) => (
+                        <div key={idx} className="relative h-14 w-14 rounded-lg overflow-hidden border border-slate-800">
+                          <img src={img} alt="Uploaded preview" className="h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeProposalImage(idx)}
+                            className="absolute top-0.5 right-0.5 bg-red-500 hover:bg-red-600 text-white p-0.5 rounded-full"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-slate-800">
+                <button
+                  onClick={() => {
+                    if (!clientCompany || !clientName) {
+                      alert("Por favor, preencha a Razão Social e o Responsável.");
+                      return;
+                    }
+                    setCurrentStep(2);
+                  }}
+                  className="bg-[#134074] hover:bg-[#1e5494] text-white text-xs font-bold font-mono tracking-wider uppercase px-6 py-3 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Avançar: Configurar Serviços</span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: PARAMETROS DETALHADOS DO ESCOPO */}
+          {currentStep === 2 && (
+            <div className="space-y-6">
+              
+              {/* HEADER ETAPA 2 */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-emerald-400" />
+                    <h3 className="text-white text-sm font-bold uppercase tracking-wider font-mono">
+                      Etapa 2 – Parâmetros Detalhados do Escopo
+                    </h3>
+                  </div>
+                  <span className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-mono font-bold">
+                    {selectedServices.length} Serviço(s) Selecionado(s)
+                  </span>
+                </div>
+                <p className="text-slate-400 text-xs">
+                  Levante todas as informações técnicas necessárias para dimensionar a mão de obra, logística e despesas antes do cálculo do orçamento.
+                </p>
+              </div>
+
+              {/* 2.1 INFORMAÇÕES GERAIS DO ESCOPO */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                  <FileText className="h-4 w-4 text-[#4895EF]" />
+                  <span>2.1 Informações Gerais</span>
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs font-mono">
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Norma Técnica Aplicável</label>
+                    <input 
+                      type="text"
+                      value={appliedNorm}
+                      onChange={(e) => setAppliedNorm(e.target.value)}
+                      placeholder="Ex: NR-12 / ABNT NBR ISO 12100"
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#4895EF]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Cliente (Razão Social)</label>
+                    <input 
+                      type="text"
+                      value={clientCompany}
+                      disabled
+                      className="w-full bg-slate-950/60 border border-slate-850/60 rounded-xl px-3 py-2 text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Cidade / Estado</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        value={clientCity}
+                        onChange={(e) => setClientCity(e.target.value)}
+                        className="w-2/3 bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                      />
+                      <input 
+                        type="text"
+                        value={clientState}
+                        onChange={(e) => setClientState(e.target.value)}
+                        className="w-1/3 bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none text-center"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Distância da Sede (Km)</label>
+                    <input 
+                      type="number"
+                      value={distanceKm}
+                      onChange={(e) => {
+                        const km = Math.max(0, parseInt(e.target.value) || 0);
+                        setDistanceKm(km);
+                        setTravelKm(km);
+                      }}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Quantidade de Visitas Técnicas</label>
+                    <input 
+                      type="number"
+                      value={technicalVisits}
+                      onChange={(e) => setTechnicalVisits(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[10px] uppercase block">Quantidade de Dias em Campo</label>
+                    <input 
+                      type="number"
+                      value={daysInField}
+                      onChange={(e) => setDaysInField(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* SERVIÇOS SELECIONADOS CARDS */}
+                <div className="pt-3 border-t border-slate-850">
+                  <span className="text-slate-400 text-[10px] font-mono uppercase block mb-2">Serviços Base de Referência (Múltipla Seleção)</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {PRE_REGISTERED_SERVICES.map((serv) => {
+                      const isSelected = selectedServices.some(s => s.id === serv.id);
+                      return (
+                        <div
+                          key={serv.id}
+                          onClick={() => toggleService(serv)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? "bg-[#0B2545]/50 border-emerald-500 text-white"
+                              : "bg-slate-950 border-slate-850 text-slate-400 hover:border-slate-750"
+                          }`}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 uppercase">
+                                {serv.category}
+                              </span>
+                              <h5 className="font-bold text-xs text-white">{serv.name}</h5>
+                            </div>
+                            <div className="flex flex-col gap-0.5 text-[10px] font-mono">
+                              <span className="text-emerald-400 font-bold">Base Sugerida: R$ {serv.basePrice.toLocaleString("pt-BR")} • {serv.hours}h</span>
+                              <span className="text-slate-400">
+                                Mercado: R$ {serv.marketMin.toLocaleString("pt-BR")} ~ R$ {serv.marketMax.toLocaleString("pt-BR")} <span className="text-amber-400/90 font-semibold">(Média: R$ {serv.marketAvg.toLocaleString("pt-BR")})</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className={`h-5 w-5 rounded-full border flex items-center justify-center shrink-0 ${
+                            isSelected ? "bg-emerald-500 border-emerald-500" : "border-slate-800"
+                          }`}>
+                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2.2 CARACTERÍSTICAS DO SERVIÇO */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                  <Sliders className="h-4 w-4 text-emerald-400" />
+                  <span>2.2 Características do Serviço (Dimensionamento Físico)</span>
+                </h4>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs font-mono">
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Equipamentos</span>
+                    <input 
+                      type="number"
+                      value={qtyEquipments}
+                      onChange={(e) => setQtyEquipments(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Máquinas</span>
+                    <input 
+                      type="number"
+                      value={qtyMachines}
+                      onChange={(e) => setQtyMachines(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Ambientes</span>
+                    <input 
+                      type="number"
+                      value={qtyRooms}
+                      onChange={(e) => setQtyRooms(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Sistemas</span>
+                    <input 
+                      type="number"
+                      value={qtySystems}
+                      onChange={(e) => setQtySystems(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Área Construída m²</span>
+                    <input 
+                      type="number"
+                      value={builtAreaM2}
+                      onChange={(e) => setBuiltAreaM2(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Área Climatizada m²</span>
+                    <input 
+                      type="number"
+                      value={climatizedAreaM2}
+                      onChange={(e) => setClimatizedAreaM2(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Pavimentos</span>
+                    <input 
+                      type="number"
+                      value={qtyFloors}
+                      onChange={(e) => setQtyFloors(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Potência Inst. (kW)</span>
+                    <input 
+                      type="number"
+                      value={installedPower}
+                      onChange={(e) => setInstalledPower(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">BTU Total (Clima)</span>
+                    <input 
+                      type="number"
+                      value={totalBtu}
+                      onChange={(e) => setTotalBtu(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd Laudos Emitidos</span>
+                    <input 
+                      type="number"
+                      value={qtyReports}
+                      onChange={(e) => setQtyReports(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 bg-slate-950 p-2.5 rounded-xl border border-slate-850">
+                    <span className="text-slate-400 text-[9px] uppercase block">Qtd ARTs CREA</span>
+                    <input 
+                      type="number"
+                      value={qtyArts}
+                      onChange={(e) => setQtyArts(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-center font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1 pt-2">
+                  <label className="text-slate-400 text-[10px] uppercase font-mono block">Especificações Técnicas Adicionais do Escopo</label>
+                  <input 
+                    type="text"
+                    value={specificParamsText}
+                    onChange={(e) => setSpecificParamsText(e.target.value)}
+                    placeholder="Ex: Posição de acesso por trava-quedas, restrições operacionais noturnas..."
+                    className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* 2.3 COMPLEXIDADE E 2.4 PORTE DO CLIENTE */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* 2.3 COMPLEXIDADE */}
+                <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <div className="border-b border-slate-800 pb-2 flex items-center justify-between">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-purple-400" />
+                      <span>2.3 Complexidade do Serviço</span>
+                    </h4>
+                    <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full font-bold">
+                      +{COMPLEXITY_MARGINS[complexity].margin}% Margem
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-[10px] leading-normal">
+                    Selecione o nível de risco e rigor normativo para ajuste automático do tempo de campo e margem recomendada.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 font-mono">
+                    {(["Baixa", "Normal", "Alta", "Muito Alta"] as const).map((lvl) => {
+                      const isSel = complexity === lvl;
+                      const info = COMPLEXITY_MARGINS[lvl];
+                      return (
+                        <button
+                          key={lvl}
+                          type="button"
+                          onClick={() => {
+                            setComplexity(lvl);
+                            setActivities(prev => prev.map(a => ({
+                              ...a,
+                              hours: Math.max(1, Math.round(a.hours * info.hhMult))
+                            })));
+                          }}
+                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                            isSel
+                              ? "bg-purple-500/10 border-purple-500 text-white shadow-lg shadow-purple-500/5"
+                              : "bg-slate-950 border-slate-850 text-slate-400 hover:border-slate-750"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-xs text-white">{lvl}</span>
+                            <span className="text-[9px] font-bold text-purple-400">+{info.margin}%</span>
+                          </div>
+                          <span className="text-[9px] text-slate-500 block">Mult. HH: {info.hhMult}x</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2.4 PORTE DO CLIENTE */}
+                <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <div className="border-b border-slate-800 pb-2 flex items-center justify-between">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-sky-400" />
+                      <span>2.4 Porte do Cliente</span>
+                    </h4>
+                    <span className="text-[10px] font-mono text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full font-bold">
+                      +{PORTE_MARGINS[clientSize]}% Margem
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-[10px] leading-normal">
+                    A categoria jurídica/faturamento do cliente define o fator de responsabilidade e compliance do laudo.
+                  </p>
+
+                  <select
+                    value={clientSize}
+                    onChange={(e) => setClientSize(e.target.value as any)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+                  >
+                    {Object.entries(PORTE_MARGINS).map(([porte, marg]) => (
+                      <option key={porte} value={porte} className="bg-slate-950 text-white">
+                        {porte} (+{marg}% Margem Comercial)
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-850 text-[10px] font-mono text-slate-400 flex justify-between items-center">
+                    <span>Soma de Margens Base Sugerida:</span>
+                    <strong className="text-emerald-400 text-xs">
+                      {PORTE_MARGINS[clientSize] + COMPLEXITY_MARGINS[complexity].margin}%
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2.5 EQUIPE TÉCNICA */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-amber-400" />
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                      2.5 Equipe Técnica Envolvida
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTeamMembers(prev => [
+                        ...prev,
+                        { id: `tm-${Date.now()}`, role: "Especialista Consultor", hourlyRate: 120.00, hours: 8 }
+                      ]);
+                    }}
+                    className="bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 px-3 py-1 rounded-lg text-[10px] font-bold font-mono uppercase transition-all cursor-pointer"
+                  >
+                    + Adicionar Profissional
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {teamMembers.map((tm, index) => (
+                    <div key={tm.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-850 items-center font-mono text-xs">
+                      <div className="md:col-span-5">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-0.5">Função / Cargo Técnico</span>
+                        <input 
+                          type="text"
+                          value={tm.role}
+                          onChange={(e) => {
+                            const newTM = [...teamMembers];
+                            newTM[index].role = e.target.value;
+                            setTeamMembers(newTM);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-bold focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-0.5">Valor HH (R$/h)</span>
+                        <input 
+                          type="number"
+                          step="0.5"
+                          value={tm.hourlyRate}
+                          onChange={(e) => {
+                            const newTM = [...teamMembers];
+                            newTM[index].hourlyRate = Math.max(0, parseFloat(e.target.value) || 0);
+                            setTeamMembers(newTM);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-bold focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-0.5">Horas HH</span>
+                        <input 
+                          type="number"
+                          value={tm.hours}
+                          onChange={(e) => {
+                            const newTM = [...teamMembers];
+                            newTM[index].hours = Math.max(0, parseInt(e.target.value) || 0);
+                            setTeamMembers(newTM);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-white font-bold text-center focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2 text-right">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-0.5">Custo Subtotal</span>
+                        <span className="text-emerald-400 font-bold">R$ {(tm.hours * tm.hourlyRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2.6 DISTRIBUIÇÃO DAS HORAS (ATIVIDADES) */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-sky-400" />
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                      2.6 Distribuição das Horas (Atividades do Cronograma)
+                    </h4>
+                  </div>
+                  <span className="text-sky-400 text-xs font-mono font-bold bg-sky-500/10 px-3 py-1 rounded-full">
+                    Total: {financials.totalHH} Horas
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {activities.map((act, index) => (
+                    <div key={act.id} className="bg-slate-950 p-3 rounded-xl border border-slate-850 font-mono text-xs space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-white font-bold text-[11px]">{act.name}</span>
+                        <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                          act.category === "campo" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                          act.category === "escritorio" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20" :
+                          "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                        }`}>
+                          {act.category}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-slate-500 text-[8px] uppercase block">Horas (h)</span>
+                          <input 
+                            type="number"
+                            value={act.hours}
+                            onChange={(e) => {
+                              const newAct = [...activities];
+                              newAct[index].hours = Math.max(0, parseInt(e.target.value) || 0);
+                              setActivities(newAct);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white font-bold text-center"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-slate-500 text-[8px] uppercase block">Valor HH (R$)</span>
+                          <input 
+                            type="number"
+                            step="1"
+                            value={act.hourlyRate}
+                            onChange={(e) => {
+                              const newAct = [...activities];
+                              newAct[index].hourlyRate = Math.max(0, parseFloat(e.target.value) || 0);
+                              setActivities(newAct);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white font-bold text-center"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="text-right text-[10px] text-slate-400 pt-1 border-t border-slate-900">
+                        Custo: <strong className="text-emerald-400">R$ {(act.hours * act.hourlyRate).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* HORAS SUMMARY BANNER */}
+                <div className="p-4 bg-slate-950 rounded-xl border border-slate-850 grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono text-xs text-center">
+                  <div>
+                    <span className="text-slate-500 text-[9px] uppercase block">Campo</span>
+                    <strong className="text-amber-400 text-sm">{financials.fieldHours}h</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[9px] uppercase block">Escritório</span>
+                    <strong className="text-sky-400 text-sm">{financials.officeHours}h</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[9px] uppercase block">Administrativo</span>
+                    <strong className="text-purple-400 text-sm">{financials.adminHours}h</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[9px] uppercase block">Custo Mão de Obra Total</span>
+                    <strong className="text-emerald-400 text-sm">R$ {financials.totalLaborCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2.7 DESPESAS OPERACIONAIS E 2.8 DESPESAS ADMINISTRATIVAS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* 2.7 DESPESAS OPERACIONAIS */}
+                <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-amber-400" />
+                      <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                        2.7 Despesas Operacionais
+                      </h4>
+                    </div>
+                    <span className="text-amber-400 text-xs font-mono font-bold">
+                      R$ {financials.operationalCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {operationalExpenses.map((exp, index) => (
+                      <div key={exp.id} className="grid grid-cols-12 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-850 items-center font-mono text-xs">
+                        <div className="col-span-5 text-white font-bold truncate">
+                          {exp.name}
+                        </div>
+                        <div className="col-span-3">
+                          <input 
+                            type="number"
+                            value={exp.qty}
+                            onChange={(e) => {
+                              const newOps = [...operationalExpenses];
+                              newOps[index].qty = Math.max(0, parseFloat(e.target.value) || 0);
+                              setOperationalExpenses(newOps);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-white text-center text-[10px]"
+                            placeholder="Qtd"
+                          />
+                        </div>
+                        <div className="col-span-4">
+                          <input 
+                            type="number"
+                            step="0.5"
+                            value={exp.unitValue}
+                            onChange={(e) => {
+                              const newOps = [...operationalExpenses];
+                              newOps[index].unitValue = Math.max(0, parseFloat(e.target.value) || 0);
+                              setOperationalExpenses(newOps);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-white text-center text-[10px]"
+                            placeholder="R$ Unit"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2.8 DESPESAS ADMINISTRATIVAS */}
+                <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="h-4 w-4 text-purple-400" />
+                      <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                        2.8 Despesas Administrativas
+                      </h4>
+                    </div>
+                    <span className="text-purple-400 text-xs font-mono font-bold">
+                      R$ {financials.adminCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {adminExpenses.map((adm, index) => (
+                      <div key={adm.id} className="grid grid-cols-12 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-850 items-center font-mono text-xs">
+                        <div className="col-span-7 text-white font-bold truncate">
+                          {adm.name}
+                        </div>
+                        <div className="col-span-5">
+                          <input 
+                            type="number"
+                            step="0.01"
+                            value={adm.value}
+                            onChange={(e) => {
+                              const newAdms = [...adminExpenses];
+                              newAdms[index].value = Math.max(0, parseFloat(e.target.value) || 0);
+                              setAdminExpenses(newAdms);
+                            }}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white text-center text-[10px]"
+                            placeholder="R$ Valor"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* EDITABLE ESCOPO TÉCNICO DAS ATIVIDADES */}
+              <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="h-4 w-4 text-sky-400" />
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider">
+                      Personalizar Itens do Escopo Técnico da Proposta
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEscopoItems(prev => [
+                        ...prev,
+                        { item: String(prev.length + 1).padStart(2, '0'), atividade: "", descricao: "" }
+                      ]);
+                    }}
+                    className="bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 px-3 py-1.5 rounded-lg text-[10px] font-bold font-mono uppercase transition-all cursor-pointer"
+                  >
+                    + Adicionar Item
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {escopoItems.map((esc, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-850">
+                      <div className="md:col-span-1">
+                        <span className="text-slate-500 text-[9px] uppercase font-mono block mb-1">Item</span>
+                        <input
+                          type="text"
+                          value={esc.item}
+                          onChange={(e) => {
+                            const newItems = [...escopoItems];
+                            newItems[index].item = e.target.value;
+                            setEscopoItems(newItems);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs font-mono text-center focus:outline-none"
+                        />
+                      </div>
+                      <div className="md:col-span-3">
+                        <span className="text-slate-500 text-[9px] uppercase font-mono block mb-1">Atividade Técnica</span>
+                        <input
+                          type="text"
+                          value={esc.atividade}
+                          onChange={(e) => {
+                            const newItems = [...escopoItems];
+                            newItems[index].atividade = e.target.value;
+                            setEscopoItems(newItems);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1 text-white text-xs font-semibold focus:outline-none"
+                          placeholder="Ex: Ensaios Físicos"
+                        />
+                      </div>
+                      <div className="md:col-span-7">
+                        <span className="text-slate-500 text-[9px] uppercase font-mono block mb-1">Descrição detalhada</span>
+                        <input
+                          type="text"
+                          value={esc.descricao}
+                          onChange={(e) => {
+                            const newItems = [...escopoItems];
+                            newItems[index].descricao = e.target.value;
+                            setEscopoItems(newItems);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1 text-white text-xs focus:outline-none"
+                          placeholder="Ex: Realização de ensaios estruturais..."
+                        />
+                      </div>
+                      <div className="md:col-span-1 flex items-end justify-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEscopoItems(prev => prev.filter((_, idx) => idx !== index));
+                          }}
+                          className="w-full text-red-500 hover:text-red-400 p-1.5 rounded-lg border border-red-500/10 hover:border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-xs font-mono font-bold uppercase cursor-pointer text-center transition-all"
+                        >
+                          Apagar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* NAVIGATION BUTTONS */}
+              <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+                <button
+                  onClick={() => setCurrentStep(1)}
+                  className="bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold font-mono tracking-wider uppercase px-5 py-3 rounded-xl transition-all cursor-pointer"
+                >
+                  Voltar
+                </button>
+                <button
+                  onClick={() => setCurrentStep(3)}
+                  className="bg-[#134074] hover:bg-[#1e5494] text-white text-xs font-bold font-mono tracking-wider uppercase px-6 py-3 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Avançar: Etapa 3 – Cálculo e Margem</span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: CÁLCULO E FORMAÇÃO DA MARGEM COMERCIAL */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              
+              {/* HEADER ETAPA 3 */}
+              <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-emerald-400" />
+                    <h3 className="text-white text-sm font-bold uppercase tracking-wider font-mono">
+                      Etapa 3 – Cálculo e Formação da Margem Comercial
+                    </h3>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
+                    financials.marketClassification === "Abaixo do Mercado"
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      : financials.marketClassification === "Dentro do Mercado"
+                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                      : "bg-red-500/10 text-red-400 border border-red-500/20"
+                  }`}>
+                    {financials.marketClassification}
+                  </span>
+                </div>
+                <p className="text-slate-400 text-xs">
+                  Consolidação automática dos custos apurados na Etapa 2, aplicação das margens estratégicas (Porte + Complexidade) e comparativo com a Tabela Mestre de Mercado.
+                </p>
+              </div>
+
+              {/* MAIN CONTENT GRID */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* LEFT COLUMN: CONTROLES FINANCEIROS E MARGENS (7 COLS) */}
+                <div className="lg:col-span-7 space-y-6">
+                  
+                  {/* CONSOLIDAÇÃO DE CUSTOS DIRETOS */}
+                  <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4 overflow-hidden">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                      <Layers className="h-4 w-4 text-[#4895EF]" />
+                      <span>Consolidação dos Custos Diretos</span>
+                    </h4>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-850 overflow-hidden min-w-0">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-1 truncate">Mão de Obra ({financials.totalHH}h)</span>
+                        <strong className="text-sky-400 text-xs sm:text-sm block truncate">
+                          R$ {financials.totalLaborCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+
+                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-850 overflow-hidden min-w-0">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-1 truncate">Custos Operacionais</span>
+                        <strong className="text-amber-400 text-xs sm:text-sm block truncate">
+                          R$ {financials.operationalCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+
+                      <div className="bg-slate-950 p-3 rounded-xl border border-slate-850 overflow-hidden min-w-0">
+                        <span className="text-slate-500 text-[9px] uppercase block mb-1 truncate">Custos Administrativos</span>
+                        <strong className="text-purple-400 text-xs sm:text-sm block truncate">
+                          R$ {financials.adminCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+
+                      <div className="bg-slate-950 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 overflow-hidden min-w-0">
+                        <span className="text-emerald-400 text-[9px] uppercase block mb-1 font-bold truncate">Custo Total Inviolável</span>
+                        <strong className="text-emerald-400 text-xs sm:text-sm block font-black truncate">
+                          R$ {financials.totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* FORMAÇÃO DA MARGEM COMERCIAL */}
+                  <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                      <Percent className="h-4 w-4 text-emerald-400" />
+                      <span>Formação e Controle da Margem Comercial</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-850 space-y-1">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Margem por Porte do Cliente:</span>
+                          <span className="text-sky-400 font-bold">+{financials.porteMargin}%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">Com base no porte: {clientSize}</p>
+                      </div>
+
+                      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-850 space-y-1">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Margem por Complexidade:</span>
+                          <span className="text-purple-400 font-bold">+{financials.complexityMargin}%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">Nível de complexidade: {complexity}</p>
+                      </div>
+                    </div>
+
+                    {/* MARGEM RECOMENDADA VS MANUAL */}
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-3 font-mono text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 font-bold">Margem Comercial Recomendada pelo Sistema:</span>
+                        <span className="text-emerald-400 font-black text-sm">{financials.recommendedMargin}%</span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-900">
+                        <label className="text-slate-400 text-[11px] cursor-pointer flex items-center gap-2">
+                          <input 
+                            type="checkbox"
+                            checked={autoMargin}
+                            onChange={(e) => setAutoMargin(e.target.checked)}
+                            className="rounded border-slate-800 bg-slate-900 text-emerald-500 focus:ring-0 h-4 w-4"
+                          />
+                          <span>Usar Margem Recomendada Automática ({financials.recommendedMargin}%)</span>
+                        </label>
+                      </div>
+
+                      {!autoMargin && (
+                        <div className="pt-2 space-y-1">
+                          <div className="flex justify-between text-slate-400 text-[10px]">
+                            <span>Margem Personalizada Ajustada Manualmente:</span>
+                            <span className="text-amber-400 font-bold">{customMarginPercent}%</span>
+                          </div>
+                          <input 
+                            type="range"
+                            min="5"
+                            max="80"
+                            value={customMarginPercent}
+                            onChange={(e) => setCustomMarginPercent(parseInt(e.target.value) || 0)}
+                            className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PARÂMETROS COMERCIAIS & IMPOSTOS */}
+                  <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl space-y-4">
+                    <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                      <Sliders className="h-4 w-4 text-amber-400" />
+                      <span>Impostos, Prazos e Condições Comerciais</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px] uppercase">Alíquota de Imposto NFS-e (%)</span>
+                        <input 
+                          type="number"
+                          value={taxPercent}
+                          onChange={(e) => setTaxPercent(Math.max(0, parseFloat(e.target.value) || 0))}
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px] uppercase">Desconto Concedido (%)</span>
+                        <input 
+                          type="number"
+                          value={discountPercent}
+                          onChange={(e) => setDiscountPercent(Math.min(90, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px] uppercase">Validade da Proposta (Dias)</span>
+                        <input 
+                          type="number"
+                          value={validityDays}
+                          onChange={(e) => setValidityDays(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px] uppercase">Prazo de Entrega (Dias Úteis)</span>
+                        <input 
+                          type="number"
+                          value={deliveryDays}
+                          onChange={(e) => setDeliveryDays(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-white focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 text-[10px] uppercase font-mono block">Condições e Termos de Pagamento</label>
+                      <textarea 
+                        rows={2}
+                        value={paymentTerms}
+                        onChange={(e) => setPaymentTerms(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl p-3 text-xs text-white focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* RIGHT COLUMN: EXECUTIVE FINANCIAL DASHBOARD (5 COLS) */}
+                <div className="lg:col-span-5 space-y-6">
+                  
+                  {/* EXECUTIVE SUMMARY DASHBOARD CARD */}
+                  <div className="bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl space-y-5 shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 h-20 w-20 bg-emerald-500/10 rounded-bl-full pointer-events-none" />
+                    
+                    <h3 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center justify-between gap-2 border-b border-slate-800 pb-3 overflow-hidden">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <TrendingUp className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">Painel Resumido de Indicadores</span>
+                      </div>
+                      <span className="text-[9px] font-mono text-slate-500 shrink-0">Auditoria Automática</span>
+                    </h3>
+
+                    {/* CARD GRID OF 4 METRIC BOXES */}
+                    <div className="space-y-3 font-mono">
+                      
+                      {/* BOX 1: ESTRUTURA DE CUSTOS */}
+                      <div className="bg-slate-950 p-3.5 sm:p-4 rounded-xl border border-slate-850 space-y-2 overflow-hidden min-w-0">
+                        <div className="flex justify-between items-center gap-2 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-900 pb-1">
+                          <span className="truncate">1. Estrutura de Custos</span>
+                          <span className="text-sky-400 font-mono shrink-0">{financials.totalHH} Horas</span>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Mão de Obra Técnica:</span>
+                            <span className="text-white font-semibold shrink-0">R$ {financials.totalLaborCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Despesas Operacionais:</span>
+                            <span className="text-white font-semibold shrink-0">R$ {financials.operationalCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Despesas Administrativas:</span>
+                            <span className="text-white font-semibold shrink-0">R$ {financials.adminCostTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 font-bold text-emerald-400 pt-1 border-t border-slate-900">
+                            <span className="truncate">Custo Total do Serviço:</span>
+                            <span className="shrink-0">R$ {financials.totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BOX 2: FORMAÇÃO DE PREÇO */}
+                      <div className="bg-slate-950 p-3.5 sm:p-4 rounded-xl border border-slate-850 space-y-2 overflow-hidden min-w-0">
+                        <div className="flex justify-between items-center gap-2 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-900 pb-1">
+                          <span className="truncate">2. Formação de Preço</span>
+                          <span className="text-emerald-400 shrink-0">{financials.appliedMarginPct}% Margem</span>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Valor da Margem:</span>
+                            <span className="text-emerald-400 font-semibold shrink-0">R$ {financials.marginValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Preço sem Impostos:</span>
+                            <span className="text-white font-semibold shrink-0">R$ {financials.preTaxPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Impostos NFS-e ({taxPercent}%):</span>
+                            <span className="text-amber-400 font-semibold shrink-0">R$ {financials.impostos.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          {financials.discountVal > 0 && (
+                            <div className="flex justify-between items-center gap-2 text-red-400">
+                              <span className="truncate">Desconto ({discountPercent}%):</span>
+                              <span className="font-semibold shrink-0">- R$ {financials.discountVal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* BOX 3: COMPARATIVO DE MERCADO */}
+                      <div className="bg-slate-950 p-3.5 sm:p-4 rounded-xl border border-slate-850 space-y-2 overflow-hidden min-w-0">
+                        <div className="flex justify-between items-center gap-2 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-900 pb-1">
+                          <span className="truncate">3. Comparativo Tabela Mestre</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${
+                            financials.marketClassification === "Abaixo do Mercado" ? "bg-emerald-500/20 text-emerald-400" :
+                            financials.marketClassification === "Dentro do Mercado" ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"
+                          }`}>{financials.marketClassification}</span>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Média de Mercado:</span>
+                            <span className="text-slate-300 font-semibold shrink-0">R$ {financials.marketAverageValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex justify-between items-center gap-2 text-slate-400">
+                            <span className="truncate">Diferença para Média:</span>
+                            <span className={`font-semibold shrink-0 ${financials.marketDiffVal <= 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                              {financials.marketDiffVal > 0 ? "+" : ""}R$ {financials.marketDiffVal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} ({financials.marketDiffPct > 0 ? "+" : ""}{financials.marketDiffPct.toFixed(1)}%)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BOX 4: RENTABILIDADE & INDICADORES EXECUTIVOS */}
+                      <div className="bg-slate-950 p-3.5 sm:p-4 rounded-xl border border-slate-850 space-y-2 overflow-hidden min-w-0">
+                        <div className="text-slate-400 text-[10px] uppercase font-bold border-b border-slate-900 pb-1 truncate">
+                          4. Rentabilidade & Eficiência
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                          <div className="min-w-0 overflow-hidden">
+                            <span className="text-slate-500 text-[9px] block truncate">Lucro Bruto R$</span>
+                            <strong className="text-emerald-400 text-xs sm:text-sm block truncate">R$ {financials.profitBruto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                          </div>
+                          <div className="min-w-0 overflow-hidden">
+                            <span className="text-slate-500 text-[9px] block truncate">Margem Líquida Real</span>
+                            <strong className="text-emerald-400 text-xs sm:text-sm block truncate">{financials.profitMarginPct.toFixed(1)}%</strong>
+                          </div>
+                          <div className="min-w-0 overflow-hidden">
+                            <span className="text-slate-500 text-[9px] block truncate">Custo por HH</span>
+                            <strong className="text-slate-300 text-xs block truncate">R$ {financials.costPerHH.toFixed(2)}/h</strong>
+                          </div>
+                          <div className="min-w-0 overflow-hidden">
+                            <span className="text-slate-500 text-[9px] block truncate">Receita por HH</span>
+                            <strong className="text-sky-400 text-xs block truncate">R$ {financials.revenuePerHH.toFixed(2)}/h</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BIG PRICE BANNER */}
+                      <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-1 overflow-hidden min-w-0">
+                        <span className="text-[10px] text-emerald-400 uppercase font-mono font-bold tracking-widest block truncate">
+                          Investimento Total da Proposta
+                        </span>
+                        <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight break-all sm:break-normal">
+                          R$ {financials.totalGeral.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-mono block truncate">
+                          Composição: Impostos ({taxPercent}%) + ART + Escopo Integral
+                        </span>
+                      </div>
+
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* STEP 3 NAVIGATION BUTTONS */}
+              <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+                <button
+                  onClick={() => setCurrentStep(2)}
+                  className="bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold font-mono tracking-wider uppercase px-5 py-3 rounded-xl transition-all cursor-pointer"
+                >
+                  Voltar para Escopo
+                </button>
+                <button
+                  onClick={() => setCurrentStep(4)}
+                  className="bg-[#134074] hover:bg-[#1e5494] text-white text-xs font-bold font-mono tracking-wider uppercase px-6 py-3 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Avançar: Gerar Proposta Comercial</span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+            </div>
+          )}
+
+          {/* STEP 4: PRINT PREVIEW AND AI ACTIONS */}
+          {currentStep === 4 && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              {/* AI & ACTIONS PANEL (LEFT 3 COLUMNS) */}
+              <div className="lg:col-span-3 space-y-6 print:hidden">
+                
+                {/* AI SUITE */}
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4 shadow-xl">
+                  <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-850 pb-2.5">
+                    <Sparkles className="h-4.5 w-4.5 text-amber-400" />
+                    <span>Inteligência Artificial</span>
+                  </h4>
+                  <p className="text-slate-400 text-[10px] leading-normal">Otimize a proposta com o assistente inteligente para adequar os objetivos, termos legais e escopos ao perfil do cliente.</p>
+
+                  <button
+                    onClick={runAIGeneration}
+                    disabled={generatingAI}
+                    className="w-full bg-slate-950 hover:bg-slate-850 text-white font-bold font-mono text-[10px] uppercase tracking-wider py-2.5 px-3 rounded-xl border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    {generatingAI ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                        <span>Processando IA...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                        <span>Reescrever com Gemini IA</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* PUBLISH AND SHARING ACTIONS */}
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3 shadow-xl">
+                  <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider border-b border-slate-850 pb-2.5">
+                    Ações de Orçamento
+                  </h4>
+
+                  <button
+                    onClick={() => handleSaveProposal("enviado")}
+                    disabled={savingProposal}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-mono text-[11px] uppercase tracking-wider py-3 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    <span>Publicar e Enviar Link</span>
+                  </button>
+
+                  <button
+                    onClick={exportA4PDF}
+                    className="w-full bg-slate-950 hover:bg-slate-850 text-white font-bold font-mono text-[11px] uppercase tracking-wider py-3 px-3 rounded-xl border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="h-4 w-4 text-emerald-400" />
+                    <span>Gerar PDF Oficial</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSaveProposal("rascunho")}
+                    disabled={savingProposal}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold font-mono text-[11px] uppercase tracking-wider py-3 px-3 rounded-xl border border-slate-800 hover:border-slate-750 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span>Salvar Rascunho</span>
+                  </button>
+                </div>
+
+                {/* SECTION SELECTOR (FLEGS) */}
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3 shadow-xl print:hidden">
+                  <h4 className="text-white font-bold font-mono text-xs uppercase tracking-wider border-b border-slate-850 pb-2.5 flex items-center gap-1.5">
+                    <Sliders className="h-4.5 w-4.5 text-[#4895EF]" />
+                    <span>Seções do Orçamento (Fleg)</span>
+                  </h4>
+                  <p className="text-slate-400 text-[10px] leading-normal">Escolha quais páginas/seções farão parte do documento final:</p>
+                  
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+                    {Object.entries({
+                      capa: "01. Capa Principal",
+                      contracapa: "02. Contracapa & Missão",
+                      principios: "03. Princípios e Valores",
+                      entregamos: "04. O que Entregamos",
+                      problemas: "05. Problemas Resolvidos",
+                      clientes: "06. Nossos Clientes & Atuação",
+                      resumoServicos: "07. Resumo de Serviços",
+                      identificacao: "08. Identificação & Demanda",
+                      equipe: "09. Engenheiros & Estrutura",
+                      atividades: "10. Atividades Detalhadas",
+                      investimento: "11. Tabela de Escopo Técnico",
+                      condicoes: "12. Diretrizes e Obrigações",
+                      prazos: "13. Valores & Prazos",
+                      assinatura: "14. Agradecimento final",
+                    }).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-2 text-[11px] text-slate-300 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={visibleSections[key as keyof typeof visibleSections]}
+                          onChange={(e) => setVisibleSections(prev => ({
+                            ...prev,
+                            [key]: e.target.checked
+                          }))}
+                          className="rounded border-slate-800 bg-slate-950 text-[#4895EF] focus:ring-0 focus:ring-offset-0 h-3.5 w-3.5 cursor-pointer"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* DOCUMENT RENDERING CANVAS (RIGHT 9 COLUMNS) */}
+              <div className="lg:col-span-9 space-y-6">
+                
+                {/* INSTRUCTION CARD */}
+                <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-2xl flex gap-2.5 text-slate-400 text-xs leading-normal print:hidden">
+                  <Info className="h-4.5 w-4.5 text-[#4895EF] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-white">Visualização Digital da Proposta Técnica</p>
+                    <p className="text-[11px]">Esta seção renderiza o documento final de 14 páginas exatamente no layout físico que seu cliente visualizará no link seguro ou no arquivo PDF impresso.</p>
+                  </div>
+                </div>
+
+                {/* THE A4 PRINT BLOCK FOR EXPORT */}
+                <div 
+                  id="proposal-printable-block"
+                  className="bg-slate-100/50 dark:bg-slate-950/20 text-slate-950 rounded-3xl overflow-hidden p-0 font-sans text-xs leading-relaxed max-w-[210mm] mx-auto text-left space-y-6 print:space-y-0"
+                >
+                  
+                  {/* PAGE 1: COVER (CAPA) */}
+                  {visibleSections.capa && (
+                    <div className="flex flex-col justify-between break-after-page page-block page-block-cover border-b border-slate-100 relative overflow-hidden bg-gradient-to-br from-[#f4f7fa] via-[#edf2f7] to-[#e2e8f0]">
+                      {/* Background Image overlay for Capa */}
+                      <img 
+                        src={capaBg} 
+                        alt="Engineering background" 
+                        className="absolute inset-0 w-full h-full object-cover opacity-[0.14] pointer-events-none" 
+                        referrerPolicy="no-referrer"
+                      />
+                      
+                      {/* Technical Blueprint Elements */}
+                      <div className="absolute top-4 left-4 text-[7px] font-mono text-slate-400 pointer-events-none">SYS.COORD // 0.00.00</div>
+                      <div className="absolute top-4 right-4 text-[7px] font-mono text-slate-400 pointer-events-none">SPEC.REF // PROP-{new Date().getFullYear()}</div>
+                      <div className="absolute bottom-4 left-4 text-[7px] font-mono text-slate-400 pointer-events-none">METRIC: ISO-A4 / SCALE: 1:1</div>
+                      <div className="absolute bottom-4 right-4 text-[7px] font-mono text-slate-400 pointer-events-none">VL.ENG.MECANICA</div>
+                      
+                      {/* Technical framing border */}
+                      <div className="absolute inset-3 border border-[#0B2545]/15 rounded-2xl pointer-events-none" />
+                      <div className="absolute inset-4 border border-[#0B2545]/5 rounded-2xl pointer-events-none" />
+                      
+                      {/* Technical AutoCAD Corner Marks */}
+                      <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-[#0B2545]/20 pointer-events-none" />
+                      <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-[#0B2545]/20 pointer-events-none" />
+                      <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-[#0B2545]/20 pointer-events-none" />
+                      <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-[#0B2545]/20 pointer-events-none" />
+                      
+                      <div className="relative z-10 flex flex-col justify-between h-full min-h-[265mm] w-full p-6">
+                        <div className="flex justify-between items-start border-b border-slate-200 pb-6">
+                          <div className="scale-100 origin-left">
+                            <Logo variant="print" className="h-16" />
+                          </div>
+                          <div className="text-right text-[9px] font-mono text-slate-500">
+                            <p className="font-bold text-[#0B2545]">VL ENGENHARIA MECÂNICA</p>
+                            <p>CREA-PE: 182229949-0</p>
+                            <p>Recife - PE</p>
+                          </div>
+                        </div>
+
+                        <div className="my-auto space-y-10 text-center py-10">
+                          <div className="inline-block bg-[#0B2545]/5 border border-[#0B2545]/15 text-[#0B2545] px-4 py-1.5 rounded-full text-[10px] font-mono uppercase tracking-widest font-bold">
+                            Proposta Técnica Comercial
+                          </div>
+                          
+                          <div className="space-y-4">
+                            <h1 className="text-4xl font-black text-[#0B2545] tracking-tight leading-none uppercase">
+                              Orçamento de Engenharia
+                            </h1>
+                            <p className="text-xs text-slate-400 font-mono tracking-widest uppercase">Laudos, Vistorias & Responsabilidade Técnica</p>
+                          </div>
+                          
+                          <div className="h-1.5 w-20 bg-[#134074] mx-auto rounded-full"></div>
+                          
+                          <p className="max-w-md mx-auto text-slate-600 text-[11px] leading-relaxed">
+                            Prestação de serviços de Engenharia Mecânica de conformidade, mapeamento de risco técnico e emissão de ART oficial para regularização jurídica e operacional.
+                          </p>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto text-left mt-10">
+                            <div className="bg-slate-50/90 backdrop-blur-xs p-4 rounded-xl border border-slate-150 space-y-2">
+                              <p className="text-[9px] font-mono text-slate-400 uppercase tracking-wider font-bold">Identificação do Cliente</p>
+                              <p className="font-bold text-[#0B2545] text-xs truncate">{clientCompany || "Empresa Cliente"}</p>
+                              <p className="text-slate-600 text-[10px]">CNPJ: {clientCnpj || "00.000.000/0001-00"}</p>
+                              <p className="text-slate-600 text-[10px]">Representante: {clientName || "Diretor de Operações"}</p>
+                            </div>
+                            
+                            <div className="bg-slate-50/90 backdrop-blur-xs p-4 rounded-xl border border-slate-150 space-y-1 font-mono text-[9px] text-slate-600">
+                              <p className="text-[9px] font-mono text-slate-400 uppercase tracking-wider font-sans font-bold">Dados Gerais</p>
+                              <p><strong>Proposta nº:</strong> PROP-{new Date().getFullYear()}-{Math.floor(100 + Math.random() * 900)}</p>
+                              <p><strong>Data de Emissão:</strong> {new Date().toLocaleDateString("pt-BR")}</p>
+                              <p><strong>Validade Comercial:</strong> {validityDays} dias</p>
+                              <p><strong>Localidade:</strong> {clientCity} - {clientState}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-200 pt-6 text-center text-[9px] text-slate-400 flex justify-between items-center font-mono">
+                          <span>© {new Date().getFullYear()} VL Engenharia • Todos os direitos reservados.</span>
+                          <span className="text-slate-500 font-bold">Página {getPageNum("capa")} de {getTotalPagesLabel()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 2: CONTRACAPA (Vitor's portrait and Propósito) */}
+                  {visibleSections.contracapa && (
+                    <div className="flex flex-col justify-between break-after-page page-block page-block-cover relative overflow-hidden bg-gradient-to-br from-[#f4f7fa] via-[#edf2f7] to-[#e2e8f0]">
+                      {/* Background Image overlay for Contracapa */}
+                      <img 
+                        src={contracapaBg} 
+                        alt="Engineering background" 
+                        className="absolute inset-0 w-full h-full object-cover opacity-[0.11] pointer-events-none" 
+                        referrerPolicy="no-referrer"
+                      />
+                      
+                      {/* Technical Blueprint Elements */}
+                      <div className="absolute top-4 left-4 text-[7px] font-mono text-slate-400 pointer-events-none">SYS.COORD // 0.01.00</div>
+                      <div className="absolute top-4 right-4 text-[7px] font-mono text-slate-400 pointer-events-none">SECTION // 01.PROPOSITO</div>
+                      <div className="absolute bottom-4 left-4 text-[7px] font-mono text-slate-400 pointer-events-none">VL.MEC.SECTION</div>
+                      <div className="absolute bottom-4 right-4 text-[7px] font-mono text-slate-400 pointer-events-none">ISO-9001 // SEC.01</div>
+                      
+                      {/* Technical framing border */}
+                      <div className="absolute inset-3 border border-[#0B2545]/15 rounded-2xl pointer-events-none" />
+                      <div className="absolute inset-4 border border-[#0B2545]/5 rounded-2xl pointer-events-none" />
+                      
+                      {/* Technical AutoCAD Corner Marks */}
+                      <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-[#0B2545]/20 pointer-events-none" />
+                      <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-[#0B2545]/20 pointer-events-none" />
+                      <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-[#0B2545]/20 pointer-events-none" />
+                      <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-[#0B2545]/20 pointer-events-none" />
+                      
+                      <div className="relative z-10 flex flex-col justify-between h-full min-h-[265mm] w-full p-6">
+                        <div className="flex justify-between items-center border-b pb-4">
+                          <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Nossa Missão & Propósito</span>
+                          <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("contracapa")}</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 my-auto items-center">
+                          <div className="md:col-span-5 space-y-6">
+                            <div className="scale-100 origin-left">
+                              <Logo variant="print" className="h-12" />
+                            </div>
+                            
+                            <div className="space-y-3">
+                              <h2 className="text-2xl font-black text-[#0B2545] tracking-tight uppercase leading-none">
+                                Nosso Propósito
+                              </h2>
+                              <p className="text-xs text-slate-400 font-mono uppercase tracking-widest">Compromisso com a conformidade real</p>
+                            </div>
+
+                            <p className="text-slate-700 text-xs leading-relaxed font-sans bg-white/80 backdrop-blur-xs p-4 border-l-4 border-[#134074] rounded-r-xl shadow-xs">
+                              "Contribuir para um ambiente mais seguro e eficiente em diversos setores industriais, elevando o nível de consciência do mercado."
+                            </p>
+
+                            <p className="text-slate-600 text-[11px] leading-relaxed">
+                              Sob a direção técnica do Engenheiro Mecânico <strong>Vitor Leonardo C. Linhares (CREA-PE 182229949-0)</strong>, nossa atuação é pautada pelo rigor metodológico e conformidade com as normas técnicas da ABNT e diretrizes federais de segurança do trabalho.
+                            </p>
+                          </div>
+
+                          <div className="md:col-span-7 flex justify-center">
+                            <div className="relative p-2.5 bg-transparent border-transparent rounded-3xl overflow-hidden max-w-sm w-full">
+                              <div className="absolute top-0 right-0 w-16 h-16 border-b border-l border-slate-400/20 pointer-events-none z-10" />
+                              <div className="absolute bottom-0 left-0 w-16 h-16 border-t border-r border-slate-400/20 pointer-events-none z-10" />
+                              
+                              <div className="aspect-[4/5] rounded-2xl overflow-hidden bg-transparent relative">
+                                <img 
+                                  referrerPolicy="no-referrer"
+                                  src="https://vitorleonardo-engmec.netlify.app/assets/vitor-leonardo-Ca17hHDt.png" 
+                                  alt="Vitor Leonardo" 
+                                  className="w-full h-full object-cover object-top"
+                                />
+                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent p-4 flex flex-col justify-end text-left">
+                                  <span className="text-[8px] font-mono font-bold tracking-widest text-[#4895EF] uppercase">
+                                    Responsável Técnico Certificado
+                                  </span>
+                                  <h3 className="text-sm font-sans font-black text-white tracking-tight">
+                                    Vitor Leonardo Cordeiro Linhares
+                                  </h3>
+                                  <p className="text-[9px] text-[#8DA9C4] font-mono font-semibold">
+                                    CREA-PE 1822299490
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                          <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                          <span>Página {getPageNum("contracapa")} de {getTotalPagesLabel()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 3: NOSSOS PRINCÍPIOS */}
+                  {visibleSections.principios && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Nossos Princípios Fundamentais</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("principios")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-8 py-6">
+                        <div className="text-center space-y-2">
+                          <h2 className="text-2xl font-black text-[#0B2545] uppercase tracking-tight">Princípios Fundamentais</h2>
+                          <p className="text-[11px] text-slate-500 max-w-md mx-auto">Valores inegociáveis que norteiam cada vistoria, parecer e entrega técnica assinada por nossa empresa.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2.5">
+                            <div className="h-8 w-8 rounded-xl bg-[#0B2545]/5 text-[#0B2545] font-mono font-bold flex items-center justify-center text-sm border border-[#0B2545]/10">01</div>
+                            <h3 className="font-bold text-sm text-[#0B2545] uppercase tracking-tight">Confiança na Entrega</h3>
+                            <p className="text-slate-600 text-[10px] leading-relaxed">
+                              Compromisso inabalável com a precisão dos prazos acordados. Nossos laudos técnicos são entregues de forma ágil para viabilizar as metas operacionais do cliente.
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2.5">
+                            <div className="h-8 w-8 rounded-xl bg-[#0B2545]/5 text-[#0B2545] font-mono font-bold flex items-center justify-center text-sm border border-[#0B2545]/10">02</div>
+                            <h3 className="font-bold text-sm text-[#0B2545] uppercase tracking-tight">Ética no Serviço</h3>
+                            <p className="text-slate-600 text-[10px] leading-relaxed">
+                              Transparência total em nossas avaliações físicas. Fornecemos pareceres periciais justos, respaldados estritamente na verdade técnica e na legislação federal.
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2.5">
+                            <div className="h-8 w-8 rounded-xl bg-[#0B2545]/5 text-[#0B2545] font-mono font-bold flex items-center justify-center text-sm border border-[#0B2545]/10">03</div>
+                            <h3 className="font-bold text-sm text-[#0B2545] uppercase tracking-tight">Satisfação do Cliente</h3>
+                            <p className="text-slate-600 text-[10px] leading-relaxed">
+                              Entendemos o negócio do cliente. Focamos em simplificar procedimentos complexos de adequação, transformando as exigências fiscais em melhorias operacionais reais.
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2.5">
+                            <div className="h-8 w-8 rounded-xl bg-[#0B2545]/5 text-[#0B2545] font-mono font-bold flex items-center justify-center text-sm border border-[#0B2545]/10">04</div>
+                            <h3 className="font-bold text-sm text-[#0B2545] uppercase tracking-tight">Relacionamento duradouro</h3>
+                            <p className="text-slate-600 text-[10px] leading-relaxed">
+                              Mais do que um fornecedor, somos parceiros de engenharia do seu negócio. Oferecemos suporte consultivo contínuo pós-entrega de laudos e laço corporativo de longo prazo.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("principios")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 4: O QUE ENTREGAMOS */}
+                  {visibleSections.entregamos && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">O Que Entregamos</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("entregamos")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-10 py-6">
+                        <div className="text-center space-y-2">
+                          <h2 className="text-2xl font-black text-[#0B2545] uppercase tracking-tight">O Que Entregamos</h2>
+                          <p className="text-[11px] text-slate-500 max-w-md mx-auto">Nossas soluções de engenharia geram resultados tangíveis para a governança das empresas parceiras.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                          <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <span className="text-lg text-emerald-500 mt-1">✔</span>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs uppercase">Ambiente mais seguro</h4>
+                              <p className="text-slate-600 text-[10px] leading-relaxed mt-1">Garantia técnica de segurança contra acidentes operacionais, reduzindo drasticamente riscos à vida e à integridade dos funcionários.</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <span className="text-lg text-emerald-500 mt-1">✔</span>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs uppercase">Solução Custo x Benefício</h4>
+                              <p className="text-slate-600 text-[10px] leading-relaxed mt-1">Otimização de custos de adequação. Projetamos e indicamos soluções financeiramente viáveis que não prejudicam a produtividade.</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <span className="text-lg text-emerald-500 mt-1">✔</span>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs uppercase">Respaldo Técnico de Excelência</h4>
+                              <p className="text-slate-600 text-[10px] leading-relaxed mt-1">Emissão de Anotações de Responsabilidade Técnica (ART) registradas no CREA-PE para plena proteção jurídica perante órgãos fiscalizadores.</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-4 items-start bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <span className="text-lg text-emerald-500 mt-1">✔</span>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs uppercase">Qualidade e Confiança</h4>
+                              <p className="text-slate-600 text-[10px] leading-relaxed mt-1">Relatórios analíticos fotográficos minuciosos, ensaios estruturais não destrutivos avançados e rastreabilidade total de dados técnicos.</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("entregamos")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 5: PROBLEMAS QUE RESOLVEMOS */}
+                  {visibleSections.problemas && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Problemas Que Ajudamos a Resolver</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("problemas")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-10 py-6">
+                        <div className="text-center space-y-2">
+                          <h2 className="text-2xl font-black text-[#0B2545] uppercase tracking-tight">Problemas que Ajudamos a Resolver</h2>
+                          <p className="text-[11px] text-slate-500 max-w-sm mx-auto">Eliminamos gargalos regulatórios, técnicos e de custos operacionais das empresas.</p>
+                        </div>
+
+                        <div className="max-w-xl mx-auto space-y-4">
+                          <div className="flex gap-4 items-center bg-red-50/50 p-4 rounded-xl border border-red-100">
+                            <div className="h-8 w-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold font-mono text-xs shrink-0">1</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs">Acidentes Operacionais</h4>
+                              <p className="text-slate-600 text-[10px]">Identificação proativa de falhas de fadiga metálica ou dimensionamento antes de causar danos físicos.</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-4 items-center bg-red-50/50 p-4 rounded-xl border border-red-100">
+                            <div className="h-8 w-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold font-mono text-xs shrink-0">2</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs">Retrabalho no Serviço</h4>
+                              <p className="text-slate-600 text-[10px]">Orientação técnica clara, eliminando a contratação de adequações incorretas e retrabalhos caros.</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-4 items-center bg-red-50/50 p-4 rounded-xl border border-red-100">
+                            <div className="h-8 w-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold font-mono text-xs shrink-0">3</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs">Complexidade nas Adequações</h4>
+                              <p className="text-slate-600 text-[10px]">Traduzimos as exigências regulatórias das NRs (NR-12, NR-13, NR-11) para um plano operacional simplificado.</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-4 items-center bg-red-50/50 p-4 rounded-xl border border-red-100">
+                            <div className="h-8 w-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold font-mono text-xs shrink-0">4</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs">Não Conformidade com as Normas</h4>
+                              <p className="text-slate-600 text-[10px]">Proteção jurídica contra multas do Ministério do Trabalho, interdições de pátio industrial ou embargos prediais.</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-4 items-center bg-red-50/50 p-4 rounded-xl border border-red-100">
+                            <div className="h-8 w-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold font-mono text-xs shrink-0">5</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs">Alto Custo</h4>
+                              <p className="text-slate-600 text-[10px]">Evitamos multas, paralisações, interdições civis e perdas judiciais que poderiam custar fortunas às empresas.</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("problemas")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 6: ALGUNS DE NOSSOS CLIENTES */}
+                  {visibleSections.clientes && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Nossos Clientes & Atuação</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("clientes")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-10 py-6">
+                        <div className="text-center space-y-2">
+                          <h2 className="text-2xl font-black text-[#0B2545] uppercase tracking-tight">Alguns De Nossos Clientes</h2>
+                          <p className="text-[11px] text-slate-500 max-w-sm mx-auto">Parceiros comerciais atendidos por nossa excelência técnica regulatória.</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto text-center">
+                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center h-24">
+                            <span className="font-bold text-[#0B2545] text-xs">Indústrias Metalúrgicas</span>
+                            <span className="text-[9px] text-slate-400 font-mono mt-1">Adequações NR-12</span>
+                          </div>
+                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center h-24">
+                            <span className="font-bold text-[#0B2545] text-xs">Frotas de Logística</span>
+                            <span className="text-[9px] text-slate-400 font-mono mt-1">Vistorias Munck / Linha</span>
+                          </div>
+                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center h-24">
+                            <span className="font-bold text-[#0B2545] text-xs">Condomínios Residenciais</span>
+                            <span className="text-[9px] text-slate-400 font-mono mt-1">Playgrounds & PMOC</span>
+                          </div>
+                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center h-24">
+                            <span className="font-bold text-[#0B2545] text-xs">Construtoras Civis</span>
+                            <span className="text-[9px] text-slate-400 font-mono mt-1">Projetos & Playgrounds</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-blue-50/30 p-5 rounded-2xl border border-blue-100 text-center max-w-lg mx-auto space-y-3">
+                          <h3 className="font-bold text-[#0B2545] text-xs uppercase tracking-wider">Mobilização Técnica em Todo o Estado de Pernambuco</h3>
+                          <p className="text-slate-600 text-[10px] leading-relaxed">
+                            Nossa base central em <strong>Recife-PE</strong> permite mobilização rápida para atendimento de vistorias técnicas emergenciais, peritagens e vistorias agendadas no Grande Recife, Caruaru, Petrolina, Olinda, Jaboatão, Ipojuca e Região Metropolitana.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("clientes")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 7: RESUMO DOS NOSSOS SERVIÇOS (ILUSTRATIVO) */}
+                  {visibleSections.resumoServicos && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Resumo de Nossos Serviços</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("resumoServicos")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-8 py-4">
+                        <div className="text-center space-y-2">
+                          <h2 className="text-2xl font-black text-[#0B2545] uppercase tracking-tight">Nossos Serviços</h2>
+                          <p className="text-[11px] text-slate-500 max-w-sm mx-auto">Soluções integradas em engenharia mecânica pericial, industrial e veicular.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex gap-3.5 items-start">
+                            <div className="h-8 w-8 bg-[#134074] text-white flex items-center justify-center font-bold rounded-lg text-xs shrink-0">⚙</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs uppercase">Adequação NR-12</h4>
+                              <p className="text-slate-600 text-[9.5px] leading-relaxed mt-1">Análise de risco de máquinas industriais, inventários de risco, projeto conceitual de proteções metálicas e emissão de ART.</p>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex gap-3.5 items-start">
+                            <div className="h-8 w-8 bg-[#134074] text-white flex items-center justify-center font-bold rounded-lg text-xs shrink-0">⚽</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs uppercase">Playgrounds</h4>
+                              <p className="text-slate-600 text-[9.5px] leading-relaxed mt-1">Avaliação e laudo de brinquedos infantis sob normas ABNT NBR 16071, atestando conformidade estrutural e segurança em parques.</p>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex gap-3.5 items-start">
+                            <div className="h-8 w-8 bg-[#134074] text-white flex items-center justify-center font-bold rounded-lg text-xs shrink-0">✏</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs uppercase">Projetos Mecânicos 3D</h4>
+                              <p className="text-slate-600 text-[9.5px] leading-relaxed mt-1">Modelagem matemática tridimensional CAD, cálculo estrutural FEA por elementos finitos e detalhamento de fabricação técnica.</p>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex gap-3.5 items-start">
+                            <div className="h-8 w-8 bg-[#134074] text-white flex items-center justify-center font-bold rounded-lg text-xs shrink-0">🚚</div>
+                            <div>
+                              <h4 className="font-bold text-[#0B2545] text-xs uppercase">Veículos & Máquinas</h4>
+                              <p className="text-slate-600 text-[9.5px] leading-relaxed mt-1">Laudo técnico estrutural de caminhões munck, guindastes de grande porte, ônibus de transporte escolar e perícia de sinistro.</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("resumoServicos")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 8: IDENTIFICACAO DO CLIENTE / DETALHES DA PROPOSTA */}
+                  {visibleSections.identificacao && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Identificação das Partes & Demanda</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("identificacao")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-6 py-4">
+                        <h2 className="text-lg font-black text-[#0B2545] uppercase tracking-tight">Detalhes do Atendimento Comercial</h2>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-2">
+                            <h4 className="font-bold text-xs text-[#0B2545] uppercase tracking-wider font-mono">Informações da Provedora</h4>
+                            <div className="text-[10px] text-slate-600 space-y-1">
+                              <p><strong>Razão Social:</strong> VL ENGENHARIA MECÂNICA</p>
+                              <p><strong>Engenheiro Responsável:</strong> Vitor Leonardo C. Linhares</p>
+                              <p><strong>CREA-PE:</strong> 182229949-0</p>
+                              <p><strong>Localidade:</strong> Recife - PE</p>
+                              <p><strong>E-mail:</strong> vitorleonardo.engmec@gmail.com</p>
+                            </div>
+                          </div>
+
+                          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-2">
+                            <h4 className="font-bold text-xs text-[#0B2545] uppercase tracking-wider font-mono">Informações do Cliente</h4>
+                            <div className="text-[10px] text-slate-600 space-y-1">
+                              <p><strong>Razão Social:</strong> {clientCompany || "Empresa Cliente Geral"}</p>
+                              <p><strong>CNPJ:</strong> {clientCnpj || "00.000.000/0001-00"}</p>
+                              <p><strong>Contato Legal:</strong> {clientName || "Responsável Técnico"}</p>
+                              <p><strong>E-mail:</strong> {clientEmail || "comercial@cliente.com"}</p>
+                              <p><strong>Telefone:</strong> {clientContact || "Não informado"}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-xl p-5 bg-blue-50/20 space-y-3">
+                          <h4 className="font-bold text-xs text-[#0B2545] uppercase tracking-wider font-mono">Detalhes da Proposta Comercial</h4>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[10px] text-slate-600">
+                            <div className="bg-white p-3 rounded-lg border border-slate-100">
+                              <p className="text-slate-400 font-mono text-[9px] uppercase">Data do Orçamento</p>
+                              <p className="font-bold text-slate-700 mt-0.5">{new Date().toLocaleDateString("pt-BR")}</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-slate-100">
+                              <p className="text-slate-400 font-mono text-[9px] uppercase">Código de Controle Interno</p>
+                              <p className="font-bold text-slate-700 mt-0.5">PROP-{new Date().getFullYear()}-{Math.floor(100 + Math.random() * 900)}</p>
+                            </div>
+                          </div>
+
+                          <div className="bg-white p-4 rounded-xl border border-slate-150 space-y-1">
+                            <p className="text-slate-400 font-mono text-[9px] uppercase">Descrição Detalhada da Demanda Solicitada pelo Cliente</p>
+                            <p className="text-xs text-[#0B2545] font-bold leading-relaxed">{demandDescription}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("identificacao")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 9: NOSSA EQUIPE & ESTRUTURA DA PROPOSTA */}
+                  {visibleSections.equipe && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Nossa Equipe & Estrutura da Proposta</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("equipe")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-8 py-4">
+                        <div>
+                          <h2 className="text-lg font-black text-[#0B2545] uppercase tracking-tight">Nossa Equipe & Estrutura</h2>
+                          <p className="text-[10px] text-slate-500 font-mono">Atendimento especializado e estruturação transparente em etapas.</p>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h3 className="font-bold text-[#0B2545] text-xs uppercase tracking-wider">Nossa Equipe Técnica</h3>
+                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-[10px] space-y-2">
+                            <strong className="text-[#0B2545] text-xs uppercase block">Engenheiros Mecânicos</strong>
+                            <p className="text-slate-600 leading-relaxed">
+                              Nossos laudos, pareceres e vistorias são elaborados, assinados e homologados exclusivamente por <strong>Engenheiros Mecânicos habilitados</strong> com registro regular ativo no CREA-PE. Garantimos a plena responsabilidade técnica (ART) sobre cada equipamento avaliado, assegurando total conformidade com todas as normas e leis federais vigentes.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-xl p-5 bg-slate-50 space-y-4">
+                          <h3 className="font-bold text-[#0B2545] text-xs uppercase tracking-wider border-b pb-2">A Proposta Será Dividida em Três Etapas:</h3>
+                          
+                          <div className="space-y-3 text-[10px] text-slate-600">
+                            <p>
+                              <strong className="text-[#0B2545]">Etapa 1: Relação/Descrição dos Serviços</strong><br />
+                              Apresentação detalhada de cada serviço selecionado, normas técnicas associadas e levantamento fotográfico inicial da demanda do cliente.
+                            </p>
+                            <p>
+                              <strong className="text-[#0B2545]">Etapa 2: Escopo dos Serviços (Metodologia)</strong><br />
+                              Definição de todas as rotinas técnicas de inspeção mecânica, checklists normativos aplicados in loco e elaboração do dossiê técnico.
+                            </p>
+                            <p>
+                              <strong className="text-[#0B2545]">Etapa 3: Prazo, Forma de Pagamento e Valores</strong><br />
+                              Apresentação das condições comerciais formais, cronograma de desembolso financeiro, formas de pagamento e prazos finais de entrega.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("equipe")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 10: ETAPA 1 - RELAÇÃO E DESCRIÇÃO DOS SERVIÇOS & LEVANTAMENTO FOTOGRÁFICO */}
+                  {visibleSections.atividades && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Etapa 1 – Relação dos Serviços & Levantamento Fotográfico</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("atividades")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-5 py-4">
+                        <div className="space-y-1">
+                          <h2 className="text-lg font-black text-[#0B2545] uppercase tracking-tight">Etapa 1: Descrição dos Serviços</h2>
+                          <p className="text-[10px] text-slate-500 font-sans">A proposta comercial contempla as seguintes soluções de engenharia mecânica pericial selecionadas:</p>
+                        </div>
+
+                        <div className="space-y-3 max-h-[110mm] overflow-hidden">
+                          {selectedServices.map((serv, index) => (
+                            <div key={index} className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
+                              <strong className="text-xs text-[#0B2545] uppercase block">{serv.name}</strong>
+                              <p className="text-[10px] text-slate-600 leading-normal">{serv.description}</p>
+                              <p className="text-[9px] text-slate-400 font-mono"><strong>Normas Técnicas Associadas:</strong> {serv.norms.join(", ")}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="border border-slate-250 rounded-xl p-4 bg-white space-y-2.5">
+                          <h4 className="font-bold text-[10px] text-[#0B2545] uppercase tracking-wider font-mono">Levantamento Fotográfico Preliminar</h4>
+                          
+                          {proposalImages.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {proposalImages.map((img, idx) => (
+                                <div key={idx} className="relative aspect-[4/3] rounded-xl overflow-hidden border border-slate-200 shadow-xs hover:shadow-md transition-shadow duration-300">
+                                  <img src={img} alt="Uploaded attachment" className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]" />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center text-slate-500 text-[10px]">
+                              <p className="font-bold">Nenhuma imagem preliminar anexada pelo usuário.</p>
+                              <p className="text-[9px] mt-0.5">O levantamento fotográfico analítico detalhado será realizado em campo pelo Engenheiro Responsável durante a inspeção física in loco.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("atividades")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 11: ETAPA 2 - ESCOPO TÉCNICO DAS ATIVIDADES */}
+                  {visibleSections.investimento && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Etapa 2 – Escopo Técnico Detalhado</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("investimento")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-6 py-4">
+                        <div>
+                          <h2 className="text-lg font-black text-[#0B2545] uppercase tracking-tight">Etapa 2: Escopo Técnico das Atividades</h2>
+                          <p className="text-[10px] text-slate-500 font-mono">Descrição exaustiva de todas as etapas metodológicas que serão realizadas:</p>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                          <table className="w-full border-collapse text-left text-[10px]">
+                            <thead>
+                              <tr className="bg-[#0B2545] text-white font-mono uppercase text-[8.5px]">
+                                <th className="p-2.5 font-bold">Item</th>
+                                <th className="p-2.5 font-bold">Atividade Técnico</th>
+                                <th className="p-2.5 font-bold">Descrição do Procedimento</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-600">
+                              {(escopoItems && escopoItems.length > 0 ? escopoItems : [
+                                { item: "01", atividade: "Inspeção In Loco", descricao: "Vistoria presencial minuciosa do maquinário ou instalação para mapeamento visual de não-conformidades de segurança." },
+                                { item: "02", atividade: "Checklists Normativos", descricao: "Aplicação de checklists técnicos customizados baseados nas resoluções ABNT e normas federais de referência." },
+                                { item: "03", atividade: "Ensaios Físicos", descricao: "Realização de ensaios estruturais não destrutivos avançados (PM, ultrassom ou estanqueidade) conforme exigido pela categoria do equipamento." },
+                                { item: "04", atividade: "Emissão de Relatório", descricao: "Elaboração de laudo fotográfico conclusivo apontando falhas e plano de ação corretivo detalhado para readequação física." },
+                                { item: "05", atividade: "ART CREA-PE", descricao: "Anotação de Responsabilidade Técnica emitida eletronicamente junto ao conselho federal de engenharia, conferindo validade legal." },
+                              ]).map((esc, idx) => (
+                                <tr key={idx}>
+                                  <td className="p-2.5 font-bold text-[#0B2545]">{esc.item}</td>
+                                  <td className="p-2.5 font-bold text-slate-800">{esc.atividade}</td>
+                                  <td className="p-2.5">{esc.descricao}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("investimento")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 12: INFORMAÇÕES OPERACIONAIS DE CAMPO */}
+                  {visibleSections.condicoes && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Informações de Campo & Diretrizes</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("condicoes")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-6 py-4">
+                        <div>
+                          <h2 className="text-lg font-black text-[#0B2545] uppercase tracking-tight">Informações Técnicas Operacionais</h2>
+                          <p className="text-[10px] text-slate-500 font-mono">Resumo técnico do dimensionamento e esforço exigidos para a entrega:</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <p className="text-[9px] font-mono text-slate-400 uppercase">Total de Equipamentos</p>
+                            <p className="text-xl font-bold text-[#0B2545] mt-1">{selectedServices.length * multiplierQty} Unidades</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <p className="text-[9px] font-mono text-slate-400 uppercase">Tempo de Engenharia</p>
+                            <p className="text-xl font-bold text-[#0B2545] mt-1">{technicalHours} Horas</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <p className="text-[9px] font-mono text-slate-400 uppercase">Janela de Mobilização</p>
+                            <p className="text-xl font-bold text-[#0B2545] mt-1">Imediata</p>
+                          </div>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-xl p-5 bg-slate-50 space-y-3">
+                          <h3 className="font-bold text-[#0B2545] text-xs uppercase tracking-wider font-mono">Diretrizes e Obrigações do Cliente</h3>
+                          <p className="text-slate-600 text-[10px] leading-relaxed">
+                            Para o cumprimento ideal das metas técnicas e dos prazos acordados, o cliente deverá disponibilizar:<br />
+                            • Acesso livre e desimpedido às máquinas e instalações objeto de vistoria técnica.<br />
+                            • Presença de operador qualificado ou técnico de manutenção para acionamento mecânico teste.<br />
+                            • Envio de documentação de histórico prévio, manuais de fabricação ou plantas caso existentes.<br />
+                            • Liberação de segurança interna do pátio operacional (EPIs especiais se exigido).
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("condicoes")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 13: ETAPA 3 - PRAZO, CONDIÇÕES DE PAGAMENTO E VALORES */}
+                  {visibleSections.prazos && (
+                    <div className="flex flex-col justify-between min-h-[285mm] break-after-page page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Etapa 3 – Prazo, Pagamento & Investimento</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("prazos")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-6 py-4">
+                        <div>
+                          <h2 className="text-lg font-black text-[#0B2545] uppercase tracking-tight">Etapa 3: Prazo, Forma de Pagamento e Valores</h2>
+                          <p className="text-[10px] text-slate-500 font-mono">Abaixo detalhamos a proposta comercial e condições gerais de investimento:</p>
+                        </div>
+
+                        {/* CONDIÇÃO TICKET BOX LAYOUT */}
+                        <div className="border-2 border-[#134074] rounded-2xl overflow-hidden shadow-lg">
+                          <div className="bg-[#0B2545] text-white px-5 py-3.5 flex justify-between items-center font-mono text-[9px] font-bold tracking-widest uppercase">
+                            <span>Condição Comercial de Engenharia</span>
+                            <span>VL Engenharia Mecânica</span>
+                          </div>
+                          
+                          <div className="p-5 bg-slate-50 space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[11px] text-slate-700">
+                              <div>
+                                <p className="text-[9px] font-mono text-slate-400 uppercase">Prazo para Entrega dos Laudos</p>
+                                <p className="font-bold text-[#0B2545] text-sm mt-0.5">{deliveryDays} Dias Úteis <span className="text-slate-500 font-normal text-xs">(após vistoria in loco)</span></p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-mono text-slate-400 uppercase">Formas e Termos de Pagamento</p>
+                                <p className="font-bold text-[#0B2545] text-xs mt-0.5">{paymentTerms}</p>
+                              </div>
+                            </div>
+
+                            <div className="border-t border-slate-200/80 pt-4 flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-xl border border-slate-100 gap-4">
+                              <div className="text-center sm:text-left">
+                                <p className="text-[9px] font-mono text-slate-400 uppercase font-bold">Investimento Comercial Líquido</p>
+                                <p className="text-3xl font-black text-emerald-600 mt-0.5">R$ {financials.totalGeral.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                <p className="text-[9px] text-slate-400 font-mono mt-1">
+                                  {hasNf 
+                                    ? "Inclusos: Emissão de Nota Fiscal de Serviços (NFS-e), taxas de CREA-PE (ART) e deslocamentos operacionais." 
+                                    : "Inclusos: Taxas de CREA-PE (ART) e deslocamentos operacionais."}
+                                </p>
+                              </div>
+                              <div className="bg-[#0B2545]/5 px-4 py-2 rounded-lg border border-[#0B2545]/10 text-center font-mono text-[10px]">
+                                <p className="text-[#0B2545] font-bold">A.R.T. Inclusa</p>
+                                <p className="text-slate-500 text-[8px] uppercase">CREA-PE Ativo</p>
+                              </div>
+                            </div>
+
+                            <p className="text-[8.5px] font-mono text-slate-400 leading-normal text-center select-none pt-2">
+                              * Proposta válida por {validityDays} dias a contar da data de emissão. Este orçamento de engenharia não constitui vínculo financeiro definitivo sem aceite digital formal.
+                            </p>
+                          </div>
+                        </div>
+
+
+
+                        {/* SIGNATURE SECTION */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-slate-100">
+                          <div className="text-center space-y-2">
+                            <div className="h-16 w-56 mx-auto border-2 border-dashed border-slate-300 rounded flex flex-col items-center justify-center bg-slate-50 p-1">
+                              <span className="text-[9px] font-mono font-bold text-slate-600 uppercase tracking-wider">Assinatura Digital — Gov.br</span>
+                              <span className="text-[8px] font-mono text-slate-400">ICP-Brasil / Certificação Eletrônica</span>
+                            </div>
+                            <p className="font-bold text-slate-800 text-xs mt-1">Vitor Leonardo C. Linhares</p>
+                            <p className="text-[9px] text-slate-400 font-mono uppercase tracking-wider">Responsável Técnico • CREA-PE 182229949-0</p>
+                          </div>
+
+                          <div className="text-center space-y-2">
+                            <p className="text-slate-400 font-mono text-[9px] italic">[Aguardando Assinatura Eletrônica]</p>
+                            <div className="h-0.5 w-32 bg-slate-200 mx-auto mt-2" />
+                            <p className="font-bold text-slate-800 text-xs mt-1">{clientName || "Representante Comercial"}</p>
+                            <p className="text-[9px] text-slate-400 font-mono uppercase tracking-wider">{clientCompany || "Empresa Cliente"}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("prazos")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PAGE 14: AGRADECIMENTO FINAL */}
+                  {visibleSections.assinatura && (
+                    <div className="flex flex-col justify-between min-h-[285mm] page-block pb-8">
+                      <div className="flex justify-between items-center border-b pb-4">
+                        <span className="text-[10px] font-bold text-[#0B2545] font-mono uppercase tracking-widest">Agradecimento & Contato</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Pág. {getPageNum("assinatura")}</span>
+                      </div>
+
+                      <div className="my-auto space-y-8 text-center py-10 max-w-lg mx-auto">
+                        <div className="scale-100 flex justify-center">
+                          <Logo variant="print" className="h-16" />
+                        </div>
+
+                        <div className="h-1 w-16 bg-[#134074] mx-auto rounded-full"></div>
+
+                        <div className="space-y-4">
+                          <h3 className="text-2xl font-black text-[#0B2545] uppercase tracking-tight">AGRADECIMENTO</h3>
+                          
+                          <p className="text-slate-600 text-xs leading-relaxed font-sans">
+                            A <strong>VL Engenharia</strong> agradece pela oportunidade de apresentar esta Proposta Comercial. Ficamos à total disposição para sanar quaisquer dúvidas técnicas ou comerciais que possam surgir sobre o escopo de serviços ou condições descritas.
+                          </p>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] text-slate-500 font-mono space-y-1">
+                          <p className="font-bold text-[#0B2545] font-sans">VL Engenharia Mecânica & Consultoria Pericial</p>
+                          <p>Recife, Pernambuco - Brasil</p>
+                          <p>Telefone / WhatsApp: (81) 98444-2592</p>
+                          <p>E-mail: vitorleonardo.engmec@gmail.com</p>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4 text-center text-[9px] text-slate-400 font-mono flex justify-between">
+                        <span>VL Engenharia Mecânica • Proposta Comercial</span>
+                        <span>Página {getPageNum("assinatura")} de {getTotalPagesLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* VIEW: PROPOSALS HISTORY TABLE & MOBILE CARDS */}
+      {activeTab === "history" && (
+        <div className="bg-slate-900/50 border border-slate-800 p-4 sm:p-6 rounded-2xl space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <h3 className="text-white text-sm font-bold uppercase tracking-wider font-mono">Acervo Histórico de Propostas e Status</h3>
+            
+            <div className="relative max-w-xs w-full">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+              <input 
+                type="text" 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por cliente ou código..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-[#4895EF] font-mono"
+              />
+            </div>
+          </div>
+
+          {/* MOBILE CARDS VIEW (md:hidden) */}
+          <div className="grid grid-cols-1 gap-3 md:hidden">
+            {filteredHistory.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 text-xs font-mono">Nenhum orçamento encontrado no histórico.</div>
+            ) : (
+              filteredHistory.map((prop) => (
+                <div key={prop.id} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 text-left">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="font-mono font-bold text-xs text-[#4895EF]">{prop.id}</span>
+                      <p className="font-bold text-white font-sans text-xs mt-0.5">{prop.clientCompany || "Cliente Geral"}</p>
+                      <p className="text-[10px] text-slate-400 font-mono">Resp: {prop.clientName || "N/A"}</p>
+                    </div>
+                    <span className={`inline-block px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                      prop.status === "aprovado"
+                        ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                        : prop.status === "enviado"
+                        ? "bg-blue-500/10 border border-blue-500/20 text-blue-400"
+                        : "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+                    }`}>
+                      {prop.status || "rascunho"}
+                    </span>
+                  </div>
+
+                  {prop.associatedLaudoTitle && (
+                    <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-500/10 border border-teal-500/30 text-teal-300 text-[10px] rounded-lg font-mono truncate max-w-full">
+                      <FileText className="w-3 h-3 text-teal-400 shrink-0" />
+                      <span className="truncate">{prop.associatedLaudoTitle}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-mono">
+                    <div>
+                      <p className="text-[9px] text-slate-500 uppercase">Cidade/UF</p>
+                      <p className="text-slate-300 text-[11px]">{prop.clientCity || "Recife"} - {prop.clientState || "PE"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] text-slate-500 uppercase">Valor Líquido</p>
+                      <p className="font-bold text-emerald-400 text-xs">
+                        R$ {(prop.pricingInfo?.totalGeral ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-end gap-1.5">
+                    {deletingProposalId === prop.id ? (
+                      <div className="flex items-center gap-1 animate-pulse bg-slate-900 p-1 rounded-lg border border-red-900/40">
+                        <span className="text-[9px] text-red-500 font-bold uppercase px-1">Excluir?</span>
+                        <button
+                          onClick={() => deleteProposal(prop.id)}
+                          className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold uppercase rounded cursor-pointer"
+                        >
+                          Sim
+                        </button>
+                        <button
+                          onClick={() => setDeletingProposalId(null)}
+                          className="px-2 py-0.5 bg-slate-800 text-slate-300 text-[9px] font-bold uppercase rounded cursor-pointer"
+                        >
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button 
+                          onClick={() => handleCopySecureLink(prop.id)}
+                          className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 text-blue-400 text-[10px] font-mono flex items-center gap-1 cursor-pointer"
+                          title="Copiar Link"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>Copiar</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => handleEditProposal(prop)}
+                          className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 text-emerald-400 text-[10px] font-mono flex items-center gap-1 cursor-pointer"
+                          title="Editar Orçamento"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                          <span>Editar</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => {
+                            const secureUrl = getSharedUrl(prop.id);
+                            window.open(secureUrl, "_blank");
+                          }}
+                          className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 text-amber-400 text-[10px] font-mono flex items-center gap-1 cursor-pointer"
+                          title="Visualizar Orçamento"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Ver</span>
+                        </button>
+
+                        <button 
+                          onClick={() => setDeletingProposalId(prop.id)}
+                          className="p-1.5 bg-slate-900 hover:bg-red-950/40 rounded-lg border border-slate-800 text-red-500 cursor-pointer"
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* DESKTOP TABLE VIEW (md:block) */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full border-collapse text-left font-mono text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400">
+                  <th className="p-3 font-semibold uppercase tracking-wider text-[10px]">Cód. Proposta</th>
+                  <th className="p-3 font-semibold uppercase tracking-wider text-[10px]">Cliente / Empresa</th>
+                  <th className="p-3 font-semibold uppercase tracking-wider text-[10px]">Cidade/UF</th>
+                  <th className="p-3 font-semibold uppercase tracking-wider text-[10px] text-right">Valor Líquido</th>
+                  <th className="p-3 font-semibold uppercase tracking-wider text-[10px] text-center">Status</th>
+                  <th className="p-3 font-semibold uppercase tracking-wider text-[10px] text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-850 text-slate-300">
+                {filteredHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-slate-500">Nenhum orçamento encontrado no histórico.</td>
+                  </tr>
+                ) : (
+                  filteredHistory.map((prop) => (
+                    <tr key={prop.id} className="hover:bg-slate-900/40">
+                      <td className="p-3 font-bold text-[#4895EF]">{prop.id}</td>
+                      <td className="p-3">
+                        <p className="font-bold text-white font-sans text-xs">{prop.clientCompany || "Cliente Geral"}</p>
+                        <p className="text-[10px] text-slate-400">Resp: {prop.clientName || "N/A"}</p>
+                        {prop.associatedLaudoTitle && (
+                          <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-teal-500/10 border border-teal-500/30 text-teal-300 text-[9px] rounded font-mono truncate max-w-[200px]" title={prop.associatedLaudoTitle}>
+                            <FileText className="w-2.5 h-2.5 text-teal-400 shrink-0" />
+                            <span className="truncate">{prop.associatedLaudoTitle}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-3">{prop.clientCity || "Recife"} - {prop.clientState || "PE"}</td>
+                      <td className="p-3 text-right font-bold text-emerald-400">
+                        R$ {(prop.pricingInfo?.totalGeral ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className={`inline-block px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                          prop.status === "aprovado"
+                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                            : prop.status === "enviado"
+                            ? "bg-blue-500/10 border border-blue-500/20 text-blue-400"
+                            : "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+                        }`}>
+                          {prop.status || "rascunho"}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {deletingProposalId === prop.id ? (
+                            <div className="flex items-center gap-1 animate-pulse bg-slate-950 p-1 rounded-lg border border-red-900/40">
+                              <span className="text-[9px] text-red-500 font-bold uppercase px-1">Excluir?</span>
+                              <button
+                                onClick={() => deleteProposal(prop.id)}
+                                className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold uppercase rounded cursor-pointer transition-all"
+                              >
+                                Sim
+                              </button>
+                              <button
+                                onClick={() => setDeletingProposalId(null)}
+                                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold uppercase rounded cursor-pointer transition-all"
+                              >
+                                Não
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button 
+                                onClick={() => handleCopySecureLink(prop.id)}
+                                className="p-1.5 bg-slate-950 hover:bg-slate-850 rounded-lg border border-slate-850 hover:border-slate-750 transition-all text-blue-400 cursor-pointer"
+                                title="Copiar Link Seguro de Assinatura"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </button>
+                              
+                              <button 
+                                onClick={() => handleEditProposal(prop)}
+                                className="p-1.5 bg-slate-950 hover:bg-slate-850 rounded-lg border border-slate-850 hover:border-slate-750 transition-all text-emerald-400 cursor-pointer"
+                                title="Editar Orçamento / Carregar Rascunho"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                              </button>
+                              
+                              <button 
+                                onClick={() => {
+                                  const secureUrl = getSharedUrl(prop.id);
+                                  window.open(secureUrl, "_blank");
+                                }}
+                                className="p-1.5 bg-slate-950 hover:bg-slate-850 rounded-lg border border-slate-850 hover:border-slate-750 transition-all text-amber-400 cursor-pointer"
+                                title="Visualizar Portal do Cliente"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </button>
+
+                              <button 
+                                onClick={() => setDeletingProposalId(prop.id)}
+                                className="p-1.5 bg-slate-950 hover:bg-red-950/40 rounded-lg border border-slate-850 hover:border-red-900/60 transition-all text-red-500 cursor-pointer"
+                                title="Excluir Orçamento"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW: MARKET VALUES BENCHMARK (VALORES PRATICADOS NO MERCADO) */}
+      {activeTab === "market" && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Header Bar */}
+          <div className="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-white text-base font-bold uppercase tracking-wider font-sans flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-emerald-400" />
+                  <span>Valores Praticados no Mercado por Serviço</span>
+                </h3>
+                <p className="text-slate-400 text-xs font-mono mt-0.5">
+                  Tabela comparativa e balizamento oficial de honorários de Engenharia Mecânica e Vistorias Periciais.
+                </p>
+              </div>
+
+              <span className="text-[10px] font-mono px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold uppercase">
+                Base Atualizada 2026 • CREA-PE / Mútua
+              </span>
+            </div>
+
+            {/* Benchmark Summary Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-1">
+                <span className="text-slate-500 text-[10px] uppercase font-bold">Média Homem-Hora Engenharia</span>
+                <p className="text-lg font-black text-white">R$ 90,00 a R$ 150,00 <span className="text-xs text-slate-400 font-normal">/ hora</span></p>
+                <p className="text-[10px] text-slate-500">Referência competitiva regional de H/H habilitado CREA</p>
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-1">
+                <span className="text-slate-500 text-[10px] uppercase font-bold">Abono Mínimo de Emissão de ART</span>
+                <p className="text-lg font-black text-emerald-400">R$ 103,16 <span className="text-xs text-slate-400 font-normal">/ laudo</span></p>
+                <p className="text-[10px] text-slate-500">Taxa oficial do conselho regional inclusa na planilha mestre</p>
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 space-y-1">
+                <span className="text-slate-500 text-[10px] uppercase font-bold">Margem Média Recomendada</span>
+                <p className="text-lg font-black text-blue-400">18% a 35% <span className="text-xs text-slate-400 font-normal">Lucro Líquido</span></p>
+                <p className="text-[10px] text-slate-500">Variável por porte da empresa contratante e risco operacional</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Market Services Comparison Table */}
+          <div className="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+              <h4 className="text-white text-xs font-bold uppercase font-mono tracking-wider">
+                Pesquisa de Mercado por Serviço Pericial de Engenharia
+              </h4>
+              <span className="text-[10px] text-slate-400 font-mono">10 serviços cadastrados</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left font-mono text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 text-[10px] uppercase">
+                    <th className="p-3">Categoria / Serviço</th>
+                    <th className="p-3">Normas de Referência</th>
+                    <th className="p-3 text-right">Nosso Valor Base</th>
+                    <th className="p-3 text-right">Piso de Mercado (Min)</th>
+                    <th className="p-3 text-right text-amber-400">Média do Mercado</th>
+                    <th className="p-3 text-right">Teto de Mercado (Max)</th>
+                    <th className="p-3 text-center">Posicionamento</th>
+                    <th className="p-3 text-center">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-850 text-slate-300">
+                  {PRE_REGISTERED_SERVICES.map((serv) => {
+                    const isSelected = selectedServices.some(s => s.id === serv.id);
+                    return (
+                      <tr key={serv.id} className="hover:bg-slate-850/50 transition-colors">
+                        <td className="p-3">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 uppercase">
+                              {serv.category}
+                            </span>
+                          </div>
+                          <p className="font-bold text-white font-sans text-xs">{serv.name}</p>
+                          <p className="text-[10px] text-slate-500 truncate max-w-xs">{serv.description}</p>
+                        </td>
+
+                        <td className="p-3 text-[10px] text-slate-400">
+                          {serv.norms.slice(0, 2).join(', ')}
+                        </td>
+
+                        <td className="p-3 text-right font-bold text-emerald-400">
+                          R$ {serv.basePrice.toLocaleString("pt-BR")}
+                        </td>
+
+                        <td className="p-3 text-right text-slate-400">
+                          R$ {serv.marketMin.toLocaleString("pt-BR")}
+                        </td>
+
+                        <td className="p-3 text-right font-bold text-amber-400">
+                          R$ {serv.marketAvg.toLocaleString("pt-BR")}
+                        </td>
+
+                        <td className="p-3 text-right text-slate-400">
+                          R$ {serv.marketMax.toLocaleString("pt-BR")}
+                        </td>
+
+                        <td className="p-3 text-center min-w-[120px]">
+                          <div className="space-y-1">
+                            <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800 relative">
+                              {(() => {
+                                const range = serv.marketMax - serv.marketMin;
+                                const pos = Math.max(0, Math.min(100, ((serv.basePrice - serv.marketMin) / range) * 100));
+                                return (
+                                  <div 
+                                    className="h-full bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full" 
+                                    style={{ width: `${pos}%` }} 
+                                  />
+                                );
+                              })()}
+                            </div>
+                            <span className="text-[9px] text-slate-400 block font-sans">Competitivo</span>
+                          </div>
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => {
+                              if (!isSelected) {
+                                toggleService(serv);
+                              }
+                              setActiveTab("new");
+                              setCurrentStep(2);
+                            }}
+                            className="px-3 py-1.5 bg-[#134074] hover:bg-[#0B2545] text-white text-[10px] font-bold uppercase rounded-lg transition-all flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                          >
+                            <Plus className="h-3 w-3" />
+                            <span>Utilizar</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

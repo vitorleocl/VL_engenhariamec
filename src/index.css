@@ -1,0 +1,334 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Space Grotesk", sans-serif;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  /* Set background of the entire window to plain white */
+  html, body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    height: auto !important;
+  }
+
+  /* Use the visibility trick to hide system UI and show only the active printable report */
+  body * {
+    visibility: hidden !important;
+  }
+
+  #laudo-crane-printable-area,
+  #laudo-crane-printable-area *,
+  #laudo-nr12-printable-area,
+  #laudo-nr12-printable-area *,
+  #laudo-heavy-printable-area,
+  #laudo-heavy-printable-area *,
+  #pmoc-report-container,
+  #pmoc-report-container *,
+  #proposal-printable-block,
+  #proposal-printable-block *,
+  #proposal-portal-printable-block,
+  #proposal-portal-printable-block *,
+  #perito-sinistro-doc,
+  #perito-sinistro-doc *,
+  #printable_laudo_document,
+  #printable_laudo_document * {
+    visibility: visible !important;
+  }
+
+  /* Position and size the active printable report at the top left of the sheet */
+  #laudo-crane-printable-area,
+  #laudo-nr12-printable-area,
+  #laudo-heavy-printable-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-width: 210mm !important;
+    margin: 0 !important;
+    padding: 12mm 12mm !important; /* Controlled elegant page margin */
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+  }
+
+  #proposal-printable-block,
+  #proposal-portal-printable-block,
+  #perito-sinistro-doc,
+  #printable_laudo_document,
+  .proposal-pdf-export-container {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important; /* Managed individually on each page block */
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+  }
+
+  /* Enforce clean page breaks and exact A4 page block height */
+  .page-block,
+  .laudo-page-block,
+  .proposal-a4-page {
+    box-sizing: border-box !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-height: 296mm !important;
+    height: auto !important;
+    max-height: 296.5mm !important;
+    overflow: visible !important;
+    position: relative !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 auto !important;
+  }
+
+  .page-block:last-child,
+  .laudo-page-block:last-child,
+  .proposal-a4-page:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  .html2pdf__page-break {
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .page-break-after-always,
+  .page-break-after,
+  .break-after-page {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .page-break-before-always,
+  .page-break-before {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  #pmoc-report-container {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important; /* Managed individually by direct children */
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  #pmoc-report-container > div {
+    box-sizing: border-box !important;
+    padding: 15mm 15mm 15mm 15mm !important; /* Controlled elegant page margins */
+    min-height: 297mm !important; /* Enforces full A4 sheet height */
+    height: 297mm !important;
+    max-height: 297mm !important;
+    overflow: visible !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0mm !important; /* Completely removes default browser headers and footers (date, title, url) */
+  }
+}
+
+/* Custom styles when generating PDF via html2pdf to guarantee exact A4 layout with wide margins */
+body.generating-pdf {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+body.generating-pdf #proposal-printable-block,
+body.generating-pdf #proposal-portal-printable-block,
+body.generating-pdf #perito-sinistro-doc,
+.proposal-pdf-export-container {
+  width: 210mm !important;
+  max-width: 210mm !important;
+  min-width: 210mm !important;
+  padding: 0 !important; /* Managed individually on each page block */
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+body.generating-pdf .page-block,
+body.generating-pdf .proposal-a4-page,
+.proposal-a4-page {
+  box-sizing: border-box !important;
+  width: 210mm !important;
+  height: 297mm !important;
+  min-height: 297mm !important;
+  max-height: 297mm !important;
+  overflow: visible !important;
+  position: relative !important;
+  page-break-after: always !important;
+  break-after: page !important;
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  margin: 0 auto !important;
+}
+
+body.generating-pdf #pmoc-report-container {
+  width: 210mm !important;
+  max-width: 210mm !important;
+  min-width: 210mm !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-sizing: border-box !important;
+  display: block !important;
+}
+
+body.generating-pdf #pmoc-report-container > div {
+  box-sizing: border-box !important;
+  padding: 12mm 12mm 12mm 12mm !important; /* Comfortable PDF page margins */
+  min-height: 297mm !important;
+  height: auto !important;
+  page-break-after: always !important;
+  break-after: page !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+}
+
+body.generating-pdf .page-break-after-always,
+body.generating-pdf .page-break-after,
+body.generating-pdf .break-after-page,
+body.generating-pdf .page-block {
+  page-break-after: always !important;
+  break-after: page !important;
+}
+
+body.generating-pdf .page-break-before-always,
+body.generating-pdf .page-break-before {
+  page-break-before: always !important;
+  break-before: page !important;
+}
+
+body.generating-pdf .print-avoid-break {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+/* Standard styling for proposal pages to look like beautiful physical A4 sheets both on-screen and printed */
+.page-block {
+  box-sizing: border-box !important;
+  padding: 15mm 15mm 15mm 15mm !important;
+  min-height: 297mm !important;
+  height: 297mm !important;
+  max-height: 297mm !important;
+  overflow: hidden !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important; /* slate-900 */
+}
+
+/* Fade-in animations for site sections */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.section-scroll-fade {
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+
+/* Fullscreen mode overrides for Modular Laudo Editor */
+body.editor-fullscreen-active {
+  overflow: hidden !important;
+}
+
+body.editor-fullscreen-active .dashboard-sidebar,
+body.editor-fullscreen-active .dashboard-top-header,
+body.editor-fullscreen-active header,
+body.editor-fullscreen-active nav,
+body.editor-fullscreen-active aside {
+  display: none !important;
+}
+
+body.editor-fullscreen-active .dashboard-main-content {
+  grid-column: span 12 / span 12 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+

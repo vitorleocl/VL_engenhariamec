@@ -1,0 +1,8 @@
+{
+  "name": "VL Engenharia | Inspeções, Laudos e Soluções em Engenharia Mecânica",
+  "description": "Site institucional e operacional de Vitor Leonardo, Engenheiro Mecânico (CREA-PE 1822299490). Serviços de adequação à NR-12, PMOC, laudos para máquinas pesadas, brinquedos/playgrounds e consultoria em confiabilidade de ativos em Recife e Pernambuco.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
