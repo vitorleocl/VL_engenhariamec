@@ -35,6 +35,7 @@ export interface ArtAttachment {
   fileName?: string;
   fileSize?: string;
   pdfDataUrl?: string; // Data URL of uploaded ART PDF for merging
+  previewImageUrl?: string; // Rendered PNG image URL of ART PDF page 1 for crisp preview/print
   uploadedAt?: string;
 }
 

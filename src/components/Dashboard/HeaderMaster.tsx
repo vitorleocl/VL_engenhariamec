@@ -22,8 +22,7 @@ interface HeaderMasterProps {
 }
 
 export default function HeaderMaster({ config = {}, variables = {}, className = '' }: HeaderMasterProps) {
-  const isCustomUpload = config.logoUrl && (config.logoUrl.startsWith('data:') || config.logoUrl.startsWith('http://') || config.logoUrl.startsWith('https://'));
-  const logoUrl = isCustomUpload ? config.logoUrl : logoImg;
+  const logoUrl = (config.logoUrl && config.logoUrl.trim() !== '') ? config.logoUrl : logoImg;
   const logoHeight = config.logoHeight || 72;
   const logoPosition = config.logoPosition || 'left';
   

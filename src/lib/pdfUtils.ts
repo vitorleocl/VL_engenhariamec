@@ -1065,7 +1065,12 @@ export async function exportToWord(elementId: string, filename: string): Promise
   const pageBlocks = Array.from(clone.querySelectorAll('.laudo-page-block, .page-block, [data-page-block="true"], .laudo-section-block, [data-section="true"]'));
   if (pageBlocks.length > 0) {
     pageBlocks.forEach((block, index) => {
+      const el = block as HTMLElement;
       if (index > 0) {
+        el.style.pageBreakBefore = 'always';
+        el.style.breakBefore = 'page';
+        el.setAttribute('style', `${el.getAttribute('style') || ''}; page-break-before: always; break-before: page; mso-break-type: page-break;`);
+        
         const pageBreakP = document.createElement('p');
         pageBreakP.style.cssText = 'page-break-before: always; break-before: page; mso-break-type: page-break; clear: both; margin: 0; padding: 0; line-height: 0; font-size: 0;';
         pageBreakP.innerHTML = '<br clear="all" style="page-break-before: always; mso-break-type: page-break;" />';
@@ -1157,9 +1162,19 @@ export async function exportToWord(elementId: string, filename: string): Promise
   const htmlContent = `
     <html xmlns:o='urn:schemas-microsoft-microsoft-com:office:office' 
           xmlns:w='urn:schemas-microsoft-microsoft-com:office:word' 
+          xmlns:m='http://schemas.microsoft.com/office/2004/12/omml'
           xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
-        <meta charset="utf-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <!--[if gte mso 9]>
+        <xml>
+          <w:WordDocument>
+            <w:View>Print</w:View>
+            <w:Zoom>100</w:Zoom>
+            <w:DoNotOptimizeForBrowser/>
+          </w:WordDocument>
+        </xml>
+        <![endif]-->
         <title>${filename}</title>
         ${styles}
       </head>

@@ -64,6 +64,108 @@ import { saveGeneratorLaudo } from '../../lib/generatorStorage';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 
+declare global {
+  interface Window {
+    pdfjsLib?: any;
+  }
+}
+
+async function renderPdfPageToDataUrl(pdfDataUrl: string): Promise<string | null> {
+  try {
+    if (!window.pdfjsLib) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.crossOrigin = 'anonymous';
+        script.onload = () => {
+          if (window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          }
+          resolve();
+        };
+        script.onerror = () => reject(new Error('PDF.js script failed to load'));
+        document.body.appendChild(script);
+      });
+    }
+
+    if (window.pdfjsLib) {
+      const loadingTask = window.pdfjsLib.getDocument(pdfDataUrl);
+      const pdf = await loadingTask.promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 2.0 });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      if (context) {
+        await page.render({ canvasContext: context, viewport }).promise;
+        return canvas.toDataURL('image/png');
+      }
+    }
+  } catch (err) {
+    console.warn('Failed rendering ART PDF page to image data URL:', err);
+  }
+  return null;
+}
+
+function ArtPdfPreviewRenderer({ pdfDataUrl, previewImageUrl }: { pdfDataUrl?: string; previewImageUrl?: string }) {
+  const [renderedUrl, setRenderedUrl] = useState<string | null>(previewImageUrl || null);
+  const [loading, setLoading] = useState<boolean>(!previewImageUrl && !!pdfDataUrl && pdfDataUrl.startsWith('data:application/pdf'));
+
+  useEffect(() => {
+    if (previewImageUrl) {
+      setRenderedUrl(previewImageUrl);
+      setLoading(false);
+      return;
+    }
+    if (pdfDataUrl && pdfDataUrl.startsWith('data:image/')) {
+      setRenderedUrl(pdfDataUrl);
+      setLoading(false);
+      return;
+    }
+    if (pdfDataUrl && pdfDataUrl.startsWith('data:application/pdf')) {
+      let isMounted = true;
+      setLoading(true);
+      renderPdfPageToDataUrl(pdfDataUrl).then(url => {
+        if (isMounted) {
+          if (url) setRenderedUrl(url);
+          setLoading(false);
+        }
+      }).catch(() => {
+        if (isMounted) setLoading(false);
+      });
+      return () => { isMounted = false; };
+    }
+    setLoading(false);
+  }, [pdfDataUrl, previewImageUrl]);
+
+  if (loading) {
+    return (
+      <div className="w-full p-8 border border-slate-300 rounded-xl bg-slate-50 text-center space-y-2 font-sans my-4">
+        <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-slate-700 font-bold text-xs uppercase tracking-wider">
+          Processando páginas da ART para exibição do documento em alta definição...
+        </p>
+      </div>
+    );
+  }
+
+  if (renderedUrl) {
+    return (
+      <div className="border border-slate-300 rounded-xl overflow-hidden bg-white p-2 shadow-sm my-2 text-center w-full">
+        <img 
+          src={renderedUrl} 
+          alt="Documento da ART" 
+          className="w-full max-h-[850px] object-contain mx-auto rounded block" 
+        />
+      </div>
+    );
+  }
+
+  return null;
+}
+
 interface LaudoTemplateEditorProps {
   clients?: ClientData[];
   equipments?: EquipmentData[];
@@ -562,12 +664,22 @@ export default function LaudoTemplateEditor({
     }
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const result = reader.result as string;
+      let previewUrl: string | undefined = undefined;
+
+      if (file.type.startsWith('image/')) {
+        previewUrl = result;
+      } else if (file.type === 'application/pdf') {
+        showToast('Processando documento da ART para visualização limpa...');
+        previewUrl = (await renderPdfPageToDataUrl(result)) || undefined;
+      }
+
       const artInfo: ArtAttachment = {
         fileName: file.name,
         fileSize: (file.size / 1024 / 1024).toFixed(2) + ' MB',
         pdfDataUrl: result,
+        previewImageUrl: previewUrl,
         uploadedAt: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR')
       };
 
@@ -587,7 +699,7 @@ export default function LaudoTemplateEditor({
         setVariables(prev => ({ ...prev, art_rrt: file.name.replace(/\.[^/.]+$/, "") }));
       }
 
-      showToast(`Arquivo de ART "${file.name}" anexado com sucesso!`);
+      showToast(`Arquivo de ART "${file.name}" anexado e processado com sucesso!`);
     };
     reader.readAsDataURL(file);
   };
@@ -841,6 +953,23 @@ export default function LaudoTemplateEditor({
         resolve();
         return;
       }
+      if (img.complete && img.naturalWidth > 0) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || 300;
+          canvas.height = img.naturalHeight || 150;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL('image/png');
+            img.src = dataUrl;
+          }
+        } catch (e) {
+          console.warn('Direct canvas draw skipped:', e);
+        }
+        resolve();
+        return;
+      }
       const tempImg = new Image();
       tempImg.crossOrigin = 'anonymous';
       tempImg.onload = () => {
@@ -870,7 +999,7 @@ export default function LaudoTemplateEditor({
   const handlePrintBrowser = async () => {
     if (activeTab !== 'preview') {
       setActiveTab('preview');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 350));
     }
     const element = printRef.current || document.getElementById('printable_laudo_document');
     if (!element) {
@@ -884,10 +1013,14 @@ export default function LaudoTemplateEditor({
     const images = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
     await Promise.all(images.map(img => convertImageToBase64(img)));
 
+    const originalTransform = element.style.transform;
+    element.style.transform = 'none';
+
     window.scrollTo(0, 0);
     setTimeout(() => {
       window.print();
-    }, 250);
+      element.style.transform = originalTransform;
+    }, 300);
   };
 
   // Export PDF with ART PDF Merger
@@ -921,7 +1054,7 @@ export default function LaudoTemplateEditor({
       originalTransform = element.style.transform;
       originalMargin = element.style.margin;
       element.style.transform = 'none';
-      element.style.margin = '0 auto';
+      element.style.margin = '0';
 
       // Apply strict PDF capture attributes
       element.setAttribute('data-pdf-mode', 'true');
@@ -972,6 +1105,8 @@ export default function LaudoTemplateEditor({
           logging: false,
           scrollX: 0,
           scrollY: 0,
+          x: 0,
+          y: 0,
           windowWidth: 794,
           width: 794
         },
@@ -2368,34 +2503,21 @@ export default function LaudoTemplateEditor({
                               <div className="grid grid-cols-2 gap-5 mt-4">
                                 {sec.photos.map(p => (
                                   <div key={p.id} className="border border-slate-300 p-2.5 rounded-lg bg-slate-50 text-center space-y-1.5 shadow-sm">
-                                    <img src={p.url} alt="Foto Vistoria" className="w-full h-56 object-cover rounded-md border border-slate-200" />
+                                    <img src={p.url} alt="Foto Vistoria" className="w-full h-64 md:h-72 object-cover rounded-md border border-slate-200" />
                                     <p className="text-[11px] text-slate-700 italic font-sans font-medium">{p.caption}</p>
                                   </div>
                                 ))}
                               </div>
                             )}
 
-                            {/* ART ATTACHMENT DISPLAY IN PREVIEW */}
+                            {/* ART ATTACHMENT DISPLAY IN PREVIEW (CRISP CANVAS/IMAGE RENDER, NO IFRAME) */}
                             {sec.contentType === 'art_attachment' && (
                               <div className="space-y-3 mt-2 w-full">
-                                {sec.artData?.pdfDataUrl ? (
-                                  sec.artData.pdfDataUrl.startsWith('data:image/') ? (
-                                    <div className="border border-slate-300 rounded-xl overflow-hidden bg-white p-2 shadow-sm">
-                                      <img 
-                                        src={sec.artData.pdfDataUrl} 
-                                        alt="ART Anexada" 
-                                        className="w-full max-h-[700px] object-contain mx-auto rounded" 
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div className="w-full h-[680px] border border-slate-300 rounded-xl overflow-hidden bg-slate-100 shadow-sm relative no-pdf-capture">
-                                      <iframe 
-                                        src={sec.artData.pdfDataUrl} 
-                                        title="Visualização do Documento de ART" 
-                                        className="w-full h-full border-none"
-                                      />
-                                    </div>
-                                  )
+                                {sec.artData?.pdfDataUrl || sec.artData?.previewImageUrl ? (
+                                  <ArtPdfPreviewRenderer 
+                                    pdfDataUrl={sec.artData.pdfDataUrl} 
+                                    previewImageUrl={sec.artData.previewImageUrl} 
+                                  />
                                 ) : (
                                   <div className="p-6 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-1.5 my-3 font-sans">
                                     <p className="text-amber-900 font-bold text-xs uppercase tracking-wide">
