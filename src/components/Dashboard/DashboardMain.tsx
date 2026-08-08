@@ -19,7 +19,9 @@ import {
   Layers,
   Sparkles,
   Calculator,
-  Landmark
+  Landmark,
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 import AdminDashboard from './AdminDashboard';
 import ClientManager from './ClientManager';
@@ -45,7 +47,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { mockDb } from '../../lib/mockDb';
 import { syncAllLocalDataToFirestore } from '../../lib/syncStorage';
-import { ClientData, EquipmentData, LaudoData, ChecklistData } from '../../types';
+import { ClientData, EquipmentData, LaudoData, ChecklistData, UserProfile, UserRole } from '../../types';
 
 type SystemRole = 'admin' | 'client';
 
@@ -58,6 +60,8 @@ export default function DashboardMain() {
   const [firebaseUnreachable, setFirebaseUnreachable] = useState(false);
 
   const [role, setRole] = useState<SystemRole>('admin');
+  const [associatedClientId, setAssociatedClientId] = useState<string | undefined>(undefined);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<'indicators' | 'clients' | 'equipments' | 'laudos' | 'checklists' | 'users' | 'portal' | 'laudos_indep' | 'pricing' | 'billing'>('indicators');
 
   // Shared high-performance real-time cached states
@@ -65,6 +69,7 @@ export default function DashboardMain() {
   const [equipments, setEquipments] = useState<EquipmentData[]>([]);
   const [laudos, setLaudos] = useState<LaudoData[]>([]);
   const [checklists, setChecklists] = useState<ChecklistData[]>([]);
+  const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [globalLoading, setGlobalLoading] = useState(true);
 
   // Automatically trigger unified local-to-cloud migration on app boot and periodically
@@ -118,15 +123,13 @@ export default function DashboardMain() {
       
       if (user) {
         setBypassAuth(false);
-        
-        // Vitor Leonardo gets assigned admin; other addresses map to clients
         if (user.email === 'vitorleonardocl@gmail.com') {
           setRole('admin');
+          setIsAuthorized(true);
           setActiveTab('indicators');
-        } else {
-          setRole('client');
-          setActiveTab('portal');
         }
+      } else {
+        setIsAuthorized(null);
       }
     });
 
@@ -147,13 +150,24 @@ export default function DashboardMain() {
         return;
       }
 
-      let loaded = { clients: false, equipments: false, laudos: false, checklists: false };
+      let loaded = { clients: false, equipments: false, laudos: false, checklists: false, users: false };
       const checkLoaded = (key: keyof typeof loaded) => {
         loaded[key] = true;
-        if (loaded.clients && loaded.equipments && loaded.laudos && loaded.checklists) {
+        if (loaded.clients && loaded.equipments && loaded.laudos && loaded.checklists && loaded.users) {
           setGlobalLoading(false);
         }
       };
+
+      const unsubUsers = onSnapshot(collection(dbInstance, 'users'), (snap) => {
+        const arr: UserProfile[] = [];
+        snap.forEach(d => arr.push(d.data() as UserProfile));
+        setUsersList(arr);
+        try { localStorage.setItem('vitor_engmec_users', JSON.stringify(arr)); } catch (e) {}
+        checkLoaded('users');
+      }, (err) => {
+        console.warn("Error listening to users:", err);
+        checkLoaded('users');
+      });
 
       const unsubClients = onSnapshot(collection(dbInstance, 'clients'), (snap) => {
         const arr: ClientData[] = [];
@@ -205,6 +219,7 @@ export default function DashboardMain() {
       }, 3000);
 
       return () => {
+        unsubUsers();
         unsubClients();
         unsubEquipments();
         unsubLaudos();
@@ -215,6 +230,50 @@ export default function DashboardMain() {
       setGlobalLoading(false);
     }
   }, [realFirebase, currentUser, bypassAuth]);
+
+  // Evaluate user authorization against users list
+  useEffect(() => {
+    if (bypassAuth || !isRealFirebase) {
+      setIsAuthorized(true);
+      setRole('admin');
+      return;
+    }
+
+    if (!currentUser) {
+      setIsAuthorized(null);
+      return;
+    }
+
+    const email = currentUser.email?.toLowerCase().trim() || '';
+
+    // Master Engenheiro Responsável is ALWAYS authorized as admin
+    if (email === 'vitorleonardocl@gmail.com') {
+      setIsAuthorized(true);
+      setRole('admin');
+      setAssociatedClientId(undefined);
+      return;
+    }
+
+    // Look for match in users list by email or uid
+    const matchedUser = usersList.find(
+      u => (u.email && u.email.toLowerCase().trim() === email) || u.uid === currentUser.uid
+    );
+
+    if (matchedUser) {
+      setIsAuthorized(true);
+      if (matchedUser.role === UserRole.ADMIN) {
+        setRole('admin');
+        setAssociatedClientId(undefined);
+      } else {
+        setRole('client');
+        setAssociatedClientId(matchedUser.clientId || undefined);
+        setActiveTab('portal');
+      }
+    } else {
+      // User is not registered or authorized in the users collection
+      setIsAuthorized(false);
+    }
+  }, [currentUser, usersList, bypassAuth, realFirebase]);
 
   // Google Authentication trigger
   const handleGoogleLogin = async () => {
@@ -309,6 +368,71 @@ export default function DashboardMain() {
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-400">
               <Shield className="w-3.5 h-3.5 text-[#134074]" />
               <span>Painel Auditado em Conformidade com a LGPD</span>
+            </div>
+
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // User logged in but NOT authorized in users collection: show security access block
+  if (currentUser && isAuthorized === false && !bypassAuth && isRealFirebase) {
+    return (
+      <section id="restricted-area" className="py-16 bg-slate-100 dark:bg-slate-950 min-h-screen transition-colors duration-300 scroll-mt-16 flex items-center justify-center">
+        <div className="max-w-md w-full px-6">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl p-8 space-y-6 text-center font-sans">
+            
+            {/* Custom unauthorized security badge */}
+            <div className="inline-flex items-center gap-2 p-2 bg-rose-500/10 rounded-2xl mx-auto border border-rose-500/20">
+              <span className="p-2.5 bg-rose-600 text-white rounded-xl shadow-md">
+                <ShieldAlert className="w-6 h-6" />
+              </span>
+              <div className="text-left px-2 leading-none">
+                <span className="text-[10px] uppercase font-mono tracking-widest text-rose-600 dark:text-rose-400 font-bold">Bloqueio de Segurança</span>
+                <p className="text-xs font-black text-slate-950 dark:text-white uppercase tracking-wider font-sans leading-none pt-0.5">Acesso Não Autorizado</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-lg font-bold font-sans tracking-tight text-slate-900 dark:text-white">
+                Usuário Pendente de Autorização
+              </h2>
+              
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 font-mono text-xs text-left space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">Conta Google Conectada:</span>
+                <p className="font-bold text-slate-900 dark:text-white truncate">{currentUser.email}</p>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans px-1 text-left">
+                Esta conta de e-mail não foi previamente autorizada no cadastro de usuários da VL Engenharia. O acesso ao acervo restrito de laudos, ARTs e vistorias é exclusivo para o Engenheiro Responsável e clientes autorizados.
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <a
+                href={`https://wa.me/5581984442592?text=${encodeURIComponent(`Olá, Engenheiro Vitor. Conectei com o e-mail ${currentUser.email} e solicito autorização para acessar a Área Restrita.`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white p-3.5 rounded-xl text-xs font-bold font-mono uppercase tracking-wider shadow-md transition-all cursor-pointer"
+              >
+                <span>Solicitar Autorização via WhatsApp</span>
+              </a>
+
+              <button
+                onClick={handleSignOut}
+                className="w-full flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 p-3.5 rounded-xl text-xs font-bold font-mono uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <LogOut className="w-4 h-4 text-rose-500" />
+                <span>Entrar com Outra Conta Google</span>
+              </button>
+
+              <button
+                onClick={() => { window.location.hash = ''; }}
+                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors font-mono cursor-pointer pt-1 block mx-auto"
+              >
+                ← Voltar ao site principal
+              </button>
             </div>
 
           </div>
@@ -702,6 +826,7 @@ export default function DashboardMain() {
               )}
               {activeTab === 'portal' && (
                 <ClientPortal 
+                  associatedClientId={associatedClientId}
                   clients={clients} 
                   laudos={laudos} 
                   checklists={checklists} 
