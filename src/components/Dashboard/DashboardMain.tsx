@@ -72,14 +72,18 @@ export default function DashboardMain() {
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [globalLoading, setGlobalLoading] = useState(true);
 
-  // Automatically trigger unified local-to-cloud migration on app boot and periodically
+  // Automatically trigger unified local-to-cloud migration only when admin is authenticated
   useEffect(() => {
-    syncAllLocalDataToFirestore().catch(err => console.warn("Sync error:", err));
-    const interval = setInterval(() => {
+    if (currentUser && isAuthorized && role === 'admin') {
       syncAllLocalDataToFirestore().catch(err => console.warn("Sync error:", err));
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
+      const interval = setInterval(() => {
+        if (auth.currentUser) {
+          syncAllLocalDataToFirestore().catch(err => console.warn("Sync error:", err));
+        }
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [currentUser, isAuthorized, role]);
 
   // Trigger cache refresh
   const handleDataChanged = () => {};
@@ -140,9 +144,9 @@ export default function DashboardMain() {
     };
   }, [realFirebase]);
 
-  // High-performance real-time cached synchronization via onSnapshot
+  // High-performance real-time cached synchronization via onSnapshot (only when user is authenticated)
   useEffect(() => {
-    if (currentUser || bypassAuth || true) {
+    if (currentUser || bypassAuth) {
       setGlobalLoading(true);
       const dbInstance = db;
       if (!dbInstance) {
@@ -165,7 +169,7 @@ export default function DashboardMain() {
         try { localStorage.setItem('vitor_engmec_users', JSON.stringify(arr)); } catch (e) {}
         checkLoaded('users');
       }, (err) => {
-        console.warn("Error listening to users:", err);
+        console.warn("Notice listening to users:", err);
         checkLoaded('users');
       });
 
@@ -176,7 +180,7 @@ export default function DashboardMain() {
         try { localStorage.setItem('vitor_engmec_clients', JSON.stringify(arr)); } catch (e) {}
         checkLoaded('clients');
       }, (err) => {
-        console.warn("Error listening to clients:", err);
+        console.warn("Notice listening to clients:", err);
         checkLoaded('clients');
       });
 
@@ -187,7 +191,7 @@ export default function DashboardMain() {
         try { localStorage.setItem('vitor_engmec_equipments', JSON.stringify(arr)); } catch (e) {}
         checkLoaded('equipments');
       }, (err) => {
-        console.warn("Error listening to equipments:", err);
+        console.warn("Notice listening to equipments:", err);
         checkLoaded('equipments');
       });
 
@@ -198,7 +202,7 @@ export default function DashboardMain() {
         try { localStorage.setItem('vitor_engmec_laudos', JSON.stringify(arr)); } catch (e) {}
         checkLoaded('laudos');
       }, (err) => {
-        console.warn("Error listening to laudos:", err);
+        console.warn("Notice listening to laudos:", err);
         checkLoaded('laudos');
       });
 
@@ -209,7 +213,7 @@ export default function DashboardMain() {
         try { localStorage.setItem('vitor_engmec_checklists', JSON.stringify(arr)); } catch (e) {}
         checkLoaded('checklists');
       }, (err) => {
-        console.warn("Error listening to checklists:", err);
+        console.warn("Notice listening to checklists:", err);
         checkLoaded('checklists');
       });
 

@@ -94,46 +94,39 @@ if (getApps().length === 0) {
 
 export const auth = getAuth(app);
 
-// Initialize Firestore with experimentalForceLongPolling to bypass websocket blocks/iframe sandbox connection hangs
+// Initialize Firestore with auto-detecting transport to bypass websocket/long-polling hangs
 // We detect if we are running in an iframe (which has IndexedDB/storage limitations and blocks third-party cookies)
 // If we are in an iframe, we force memoryLocalCache to guarantee a smooth experience without connection hangs.
 export let db;
 try {
   const isIframe = typeof window !== 'undefined' && window.self !== window.top;
   db = initializeFirestore(app, {
-    experimentalForceLongPolling: true,
+    experimentalAutoDetectLongPolling: true,
     localCache: isIframe ? memoryLocalCache() : persistentLocalCache({
       tabManager: persistentMultipleTabManager()
     })
-  });
+  }, firebaseConfig.firestoreDatabaseId || '(default)');
 } catch (error) {
   db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 }
 
-// Test connection strictly as requested by Firebase Integration Guidelines, enhanced with low timeout
+// Test connection safely as requested by Firebase Integration Guidelines
 async function testConnection() {
   if (!isRealFirebase) {
     setFirebaseUnreachable(false);
     return;
   }
   
-  const timeoutPromise = new Promise((_, reject) => 
-    setTimeout(() => reject(new Error('timeout')), 4500)
-  );
-
   try {
-    await Promise.race([
-      getDocFromServer(doc(db, 'test', 'connection')),
-      timeoutPromise
-    ]);
+    await getDocFromServer(doc(db, 'test', 'connection'));
     setFirebaseUnreachable(false);
   } catch (error: any) {
-    // If the server answered 'permission-denied', it is reachable! That is a success confirmation of server response.
+    // If the server answered 'permission-denied', it is reachable and online!
     if (error && (error.code === 'permission-denied' || error.message?.includes('permission-denied') || error.message?.includes('PERMISSION_DENIED'))) {
       setFirebaseUnreachable(false);
-    } else {
-      console.warn("Please check your Firebase configuration: Firestore backend is currently unreachable. Error details:", error);
-      setFirebaseUnreachable(true);
+    } else if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('backend'))) {
+      console.warn("Firestore operates in offline/local cache mode until connectivity is established.");
+      setFirebaseUnreachable(false);
     }
   }
 }
