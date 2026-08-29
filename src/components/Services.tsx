@@ -177,55 +177,55 @@ export default function Services() {
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
 
   return (
-    <section id="servicos" className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 scroll-mt-16">
+    <section id="servicos" className="py-20 md:py-24 bg-[#F4F7FB] dark:bg-[#0B2240] border-t border-b border-slate-200/80 dark:border-slate-800/80 transition-colors duration-300 scroll-mt-16">
       <div className="max-w-7xl mx-auto px-6">
         
         {/* Section Header */}
         <ScrollReveal delay={0.1}>
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="text-sm font-semibold tracking-widest text-[#0B2545] dark:text-[#134074] uppercase block mb-3 font-mono">
+            <span className="text-xs md:text-sm font-bold tracking-widest text-[#134074] dark:text-[#4895EF] uppercase block mb-3 font-mono">
               Especialidades Técnicas
             </span>
-            <h2 className="text-3xl md:text-5xl font-sans font-bold text-slate-950 dark:text-white tracking-tight leading-none mb-6">
+            <h2 className="text-3xl md:text-5xl font-sans font-extrabold text-slate-950 dark:text-white tracking-tight leading-tight mb-5">
               Nossos Serviços de Engenharia
             </h2>
-            <p className="text-slate-600 dark:text-slate-400 text-lg">
+            <p className="text-slate-700 dark:text-slate-200 text-base md:text-lg leading-relaxed">
               Atuação técnica especializada orientada à segurança legal, aumento de disponibilidade, conformidade normativa e alta confiabilidade mecânica.
             </p>
           </div>
         </ScrollReveal>
 
         {/* Services Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-7">
           {servicesList.map((service, index) => {
             const IconComponent = service.icon;
             return (
               <ScrollReveal 
                 key={service.id} 
-                delay={(index % 4) * 0.1} 
+                delay={(index % 4) * 0.08} 
                 direction="up"
                 className="h-full"
               >
                 <div
                   id={`card-servico-${service.id}`}
-                  className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 p-6 flex flex-col justify-between hover:shadow-xl transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.02] active:scale-[0.99] group cursor-pointer relative h-full"
+                  className="bg-white dark:bg-[#0D2647] rounded-3xl border border-slate-200/90 dark:border-slate-700/80 p-6 sm:p-7 flex flex-col justify-between hover:shadow-2xl hover:shadow-[#4895EF]/10 transition-all duration-300 hover:-translate-y-2 hover:scale-[1.02] hover:border-[#4895EF]/60 hover:ring-1 hover:ring-[#4895EF]/30 active:scale-[0.99] group cursor-pointer relative h-full"
                   onClick={() => setSelectedService(service)}
                 >
                   <div>
-                    <div className="w-12 h-12 rounded-xl bg-[#134074]/10 text-[#134074] dark:bg-[#134074]/20 dark:text-[#8DA9C4] flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                    <div className="w-13 h-13 rounded-2xl bg-[#134074]/10 text-[#134074] dark:bg-[#134074]/30 dark:text-cyan-300 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-[#134074] group-hover:text-cyan-300 transition-all duration-300 shadow-sm">
                       <IconComponent className="w-6 h-6" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-950 dark:text-white mb-3 tracking-tight group-hover:text-[#134074] dark:group-hover:text-[#4895EF] transition-colors">
                       {service.title}
                     </h3>
-                    <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-6">
+                    <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed mb-6 font-normal">
                       {service.shortDesc}
                     </p>
                   </div>
 
-                  <div className="pt-4 border-t border-slate-100 dark:border-slate-700 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#134074] dark:text-[#4895EF] group-hover:gap-3 transition-all">
+                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-[#134074] dark:text-[#4895EF] group-hover:text-blue-600 dark:group-hover:text-cyan-300 transition-colors">
                     <span>Saber mais</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform duration-300" />
                   </div>
                 </div>
               </ScrollReveal>
@@ -235,57 +235,57 @@ export default function Services() {
 
         {/* Interactive Modal / Mini Page representation */}
         {selectedService && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
             <div 
               id="detalhe-servico-modal"
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl relative"
+              className="bg-white dark:bg-[#0A1E38] border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl relative"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header Box */}
               <div className="bg-[#0B2545] text-white p-8 relative">
                 <button
                   onClick={() => setSelectedService(null)}
-                  className="absolute right-6 top-6 text-white/80 hover:text-white bg-white/10 hover:bg-white/25 p-2 rounded-full transition-all"
+                  className="absolute right-6 top-6 text-white/80 hover:text-white bg-white/10 hover:bg-white/25 p-2 rounded-full transition-all duration-200 cursor-pointer"
                   aria-label="Close dialog"
                 >
                   <X className="w-5 h-5" />
                 </button>
-                <div className="flex items-center gap-4 mb-3">
-                  <span className="p-2 border border-white/20 bg-white/10 rounded-xl text-[#4895EF]">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="p-2 border border-white/20 bg-white/10 rounded-xl text-cyan-300">
                     <selectedService.icon className="w-6 h-6" />
                   </span>
-                  <span className="text-xs tracking-widest font-mono uppercase text-[#4895EF]">Engenharia Mecânica</span>
+                  <span className="text-xs tracking-widest font-mono uppercase text-cyan-300 font-bold">Engenharia Mecânica • CREA-PE</span>
                 </div>
-                <h3 className="text-2xl md:text-3xl font-sans font-bold tracking-tight">
+                <h3 className="text-2xl md:text-3xl font-sans font-bold tracking-tight text-white">
                   {selectedService.title}
                 </h3>
               </div>
 
               {/* Body Content */}
-              <div className="p-8 md:p-10 space-y-10">
+              <div className="p-8 md:p-10 space-y-8">
                 
                 {/* Overview */}
                 <div className="space-y-3">
-                  <h4 className="text-sm tracking-wider uppercase font-mono text-[#134074] dark:text-[#4895EF] font-bold">
+                  <h4 className="text-xs md:text-sm tracking-wider uppercase font-mono text-[#134074] dark:text-[#4895EF] font-bold">
                     Visão Geral do Serviço
                   </h4>
-                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed text-base md:text-lg">
+                  <p className="text-slate-800 dark:text-slate-200 leading-relaxed text-base md:text-lg">
                     {selectedService.details.overview}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-200 dark:border-slate-800">
                   {/* Regulatory Norms */}
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-2">
                        <FileBadge className="w-5 h-5 text-[#134074] dark:text-[#4895EF]" />
-                      <h4 className="font-bold text-slate-900 dark:text-white font-sans text-base">
+                      <h4 className="font-bold text-slate-950 dark:text-white font-sans text-base">
                         Normatização & Legislação Key
                       </h4>
                     </div>
                     <ul className="space-y-2.5">
                       {selectedService.details.norms.map((norm, idx) => (
-                        <li key={idx} className="flex gap-2.5 text-sm text-slate-600 dark:text-slate-400 items-start">
+                        <li key={idx} className="flex gap-2.5 text-sm text-slate-700 dark:text-slate-300 items-start">
                           <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                           <span>{norm}</span>
                         </li>
@@ -297,13 +297,13 @@ export default function Services() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-2">
                       <FileText className="w-5 h-5 text-[#134074] dark:text-[#4895EF]" />
-                      <h4 className="font-bold text-slate-900 dark:text-white font-sans text-base">
+                      <h4 className="font-bold text-slate-950 dark:text-white font-sans text-base">
                         Entregáveis do Projeto
                       </h4>
                     </div>
                     <ul className="space-y-2.5">
                       {selectedService.details.deliverables.map((del, idx) => (
-                        <li key={idx} className="flex gap-2.5 text-sm text-slate-600 dark:text-slate-400 items-start">
+                        <li key={idx} className="flex gap-2.5 text-sm text-slate-700 dark:text-slate-300 items-start">
                           <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                           <span>{del}</span>
                         </li>
@@ -313,17 +313,17 @@ export default function Services() {
                 </div>
 
                 {/* Scope Workflow */}
-                <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
-                  <h4 className="text-sm tracking-wider uppercase font-mono text-[#134074] dark:text-[#4895EF] font-bold">
+                <div className="space-y-4 pt-6 border-t border-slate-200 dark:border-slate-800">
+                  <h4 className="text-xs md:text-sm tracking-wider uppercase font-mono text-[#134074] dark:text-[#4895EF] font-bold">
                     Etapas de Execução do Diagnóstico
                   </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     {selectedService.details.workflow.map((flow, idx) => (
-                      <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-700/40 relative">
-                        <span className="absolute right-4 top-3 text-2xl font-black text-slate-200 dark:text-slate-700/60 font-mono">
+                      <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 relative">
+                        <span className="absolute right-4 top-3 text-2xl font-black text-slate-300 dark:text-slate-700/80 font-mono">
                           0{idx + 1}
                         </span>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed font-sans pr-4 pt-2">
+                        <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed font-sans pr-4 pt-2">
                           {flow}
                         </p>
                       </div>
@@ -331,21 +331,21 @@ export default function Services() {
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row gap-4 items-center justify-between">
-                  <div className="text-slate-500 text-xs dark:text-slate-400 font-mono text-center md:text-left">
+                <div className="pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row gap-4 items-center justify-between">
+                  <div className="text-slate-600 text-xs dark:text-slate-300 font-mono text-center md:text-left">
                     Todos os trabalhos acompanham laudo e ART assinados por Vitor Leonardo Cordeiro Linhares (CREA-PE).
                   </div>
                   <div className="flex gap-3">
                     <button
                       onClick={() => setSelectedService(null)}
-                      className="px-5 py-2.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-medium transition-colors"
+                      className="px-5 py-2.5 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm font-medium transition-colors cursor-pointer"
                     >
                       Fechar
                     </button>
                     <a
                       href="#contato"
                       onClick={() => setSelectedService(null)}
-                      className="px-6 py-2.5 rounded-xl bg-[#0B2545] hover:bg-[#134074] text-white text-sm font-medium transition-colors text-center"
+                      className="px-6 py-2.5 rounded-xl bg-[#0B2545] hover:bg-[#134074] text-white text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 text-center cursor-pointer shadow-md"
                     >
                       Solicitar Orçamento
                     </a>

@@ -9,6 +9,7 @@ import { Shield, Sun, Moon, KeyRound, ArrowUp, Menu, X, ArrowLeft, Instagram } f
 import Hero from './components/Hero';
 import Services from './components/Services';
 import About from './components/About';
+import SocialProof from './components/SocialProof';
 import ExecutedServicesCarousel from './components/ExecutedServicesCarousel';
 import Contact from './components/Contact';
 import DashboardMain from './components/Dashboard/DashboardMain';
@@ -329,6 +330,9 @@ export default function App() {
         </ScrollReveal>
         <ScrollReveal direction="subtle-up" duration={1.0}>
           <About />
+        </ScrollReveal>
+        <ScrollReveal direction="subtle-up" duration={1.0}>
+          <SocialProof />
         </ScrollReveal>
         <ScrollReveal direction="subtle-up" duration={1.0}>
           <ExecutedServicesCarousel />
