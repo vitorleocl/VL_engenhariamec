@@ -19,6 +19,7 @@ const carouselItems = [
     title: 'Adequação à NR-12: Torno Universal & Maquinário Industrial',
     subtitle: 'Indústrias Metalmecânicas, Oficinas & Fábricas',
     image: nr12Img,
+    fallback: '/nr12.jpg',
     description: 'Apreciação de riscos em máquinas operatrizes e prensas, instalação de proteções físicas e enclausuramento, chaves de intertravamento de segurança Categoria 4 e certificação legal com emissão de ART via CREA-PE.',
     highlights: ['Enquadramento integral na NR-12 e normas ABNT', 'Dispositivos de segurança à prova de falhas', 'Liberação operacional imediata com respaldo legal'],
     category: 'Segurança NR-12'
@@ -27,6 +28,7 @@ const carouselItems = [
     title: 'Diagnóstico Hidráulico & Integridade: Retroescavadeira',
     subtitle: 'Locadoras, Construtoras & Mineradoras',
     image: hidraulicoImg,
+    fallback: '/hidraulico.jpg',
     description: 'Identificação de não-conformidades críticas em circuitos hidráulicos, fadiga estrutural de lanças e atestado operacional de segurança para máquinas pesadas em canteiros de obras.',
     highlights: ['Fadiga mecânica e estanqueidade monitoradas', 'Análise de integridade de chassi e cabine ROPS/FOPS', 'Inspeção ágil em pátio com laudo conclusivo'],
     category: 'Máquinas Pesadas'
@@ -35,6 +37,7 @@ const carouselItems = [
     title: 'Inspeção e Conformidade Técnica: Caminhão Munck',
     subtitle: 'Locadoras de Guindautos & Içamento',
     image: munckImg,
+    fallback: '/munck.png',
     description: 'Inspeção de estabilizadores, patolas, gráfico de carga, cabos e adequação dos adesivos de sinalização e operação conforme exigido pelas normas NR-11 e NR-12.',
     highlights: [
       'Laudo com memorial de cálculo e tabela de carga',
@@ -47,6 +50,7 @@ const carouselItems = [
     title: 'Vistoria e Regularização de Playgrounds Infantis',
     subtitle: 'Condomínios, Escolas, Restaurantes & Parques',
     image: playgroundImg,
+    fallback: '/playground.jpg',
     description: 'Mapeamento dimensional e estrutural preventivo em brinquedos infantis sob a norma ABNT NBR 16071. Detecção de cantos vivos, risco de aprisionamento, estado da madeira e fixações.',
     highlights: ['Conformidade total com a ABNT NBR 16071', 'Ambiente infantil seguro e livre de riscos', 'Relatório fotográfico detalhado e ART no CREA-PE'],
     category: 'Playgrounds'
@@ -55,6 +59,7 @@ const carouselItems = [
     title: 'Gerenciamento do PMOC & Qualidade do Ar Climatizado',
     subtitle: 'Restaurantes, Hospitais, Clínicas, Shoppings & Edifícios',
     image: pmocImg,
+    fallback: '/pmoc.webp',
     description: 'Elaboração e execução do Plano de Manutenção, Operação e Controle (PMOC), vistorias periódicas, controle higiênico dos dutos e climatizadores, assegurando conformidade com a Lei Federal 13.589/2018 e ANVISA.',
     highlights: ['Emissão integral conforme Lei Federal 13.589/2018', 'Prevenção de riscos respiratórios e normas ANVISA', 'Livro de registro e cronograma de manutenção'],
     category: 'PMOC Climatização'
@@ -63,6 +68,7 @@ const carouselItems = [
     title: 'Laudo de Reclassificação de Dano Veicular (Média Monta)',
     subtitle: 'Locadoras, Seguradoras & Gestores de Frotas',
     image: montaImg,
+    fallback: '/monta.avif',
     description: 'Dossiê técnico pericial e dimensional de longarinas, chassi e sistemas mecânicos pós-sinistro, viabilizando o desbloqueio rápido e regularização documental do veículo junto ao DETRAN-PE.',
     highlights: ['Redução significativa de prejuízos em sinistros', 'Dossiê estrutural com ensaios e chancelado por ART', 'Desimpedimento ágil de restrições administrativas'],
     category: 'Regularização Veicular'
@@ -122,6 +128,12 @@ export default function ExecutedServicesCarousel() {
                   alt={activeItem.title}
                   referrerPolicy="no-referrer"
                   className="absolute inset-0 w-full h-full object-cover transition-all duration-700 ease-in-out group-hover:scale-105"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (target.src !== activeItem.fallback && !target.src.endsWith(activeItem.fallback)) {
+                      target.src = activeItem.fallback;
+                    }
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/25 to-transparent pointer-events-none" />
                 
